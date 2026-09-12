@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h3 class="mb-1">Dashboard</h3>
+<p class="text-muted mb-4">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card p-3 stat">
+      <div class="stat-label">Total Stock</div>
+      <div class="stat-value">{{ "%.2f"|format(stock|sum(attribute="current_mt")) }}<span class="unit">MT</span></div>
+      <div class="stat-note">Across all products at this godown</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 stat">
+      <div class="stat-label">Advance Owed to Dealers</div>
+      <div class="stat-value accent">{{ "%.0f"|format(total_advance) }}<span class="unit">bags</span></div>
+      <div class="stat-note">Billed ahead of dispatch</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 stat stat-bad">
+      <div class="stat-label">Material on Hold</div>
+      <div class="stat-value neg">{{ "%.0f"|format(total_hold) }}<span class="unit">bags</span></div>
+      <div class="stat-note">Dispatched ahead of billing</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 stat stat-mute">
+      <div class="stat-label">Open Dealer Positions</div>
+      <div class="stat-value">{{ advance_hold_count }}</div>
+      <div class="stat-note"><a href="/dealer-report">View Advance/Hold report &rarr;</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
+  <h5>Current Stock by Product</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Product</th><th class="num">Opening (Bags)</th><th class="num">Received</th><th class="num">Dispatched</th><th class="num">Current (Bags)</th><th class="num">Current (MT)</th></tr></thead>
+    <tbody>
+      {% for s in stock %}
+      <tr>
+        <td>{{ s.product.name }}</td>
+        <td class="num">{{ "%.0f"|format(s.opening_bags) }}</td>
+        <td class="num">{{ "%.0f"|format(s.received_bags) }}</td>
+        <td class="num">{{ "%.0f"|format(s.dispatched_bags) }}</td>
+        <td class="num fw-bold">{{ "%.0f"|format(s.current_bags) }}</td>
+        <td class="num">{{ "%.2f"|format(s.current_mt) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h5>Recent Dispatches</h5>
+      <div class="table-responsive">
+      <table class="table table-hover">
+        <thead><tr><th>Date</th><th>Dealer</th><th>Product</th><th class="num">Bags</th></tr></thead>
+        <tbody>
+        {% for d in recent_dispatch %}
+          <tr><td class="doc">{{ d.date }}</td><td>{{ d.dealer.name }}</td><td>{{ d.product.name }}</td><td class="num">{{ d.bags|int }}</td></tr>
+        {% else %}
+          <tr><td colspan="4" class="text-center text-muted">No dispatches yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h5>Recent GRNs</h5>
+      <div class="table-responsive">
+      <table class="table table-hover">
+        <thead><tr><th>Date</th><th>Vehicle</th><th>Product</th><th class="num">Bags Recd.</th></tr></thead>
+        <tbody>
+        {% for g in recent_grn %}
+          <tr><td class="doc">{{ g.date }}</td><td class="doc">{{ g.vehicle_no or "-" }}</td><td>{{ g.product.name }}</td><td class="num">{{ g.bags_received|int }}</td></tr>
+        {% else %}
+          <tr><td colspan="4" class="text-center text-muted">No GRNs yet — import a Material In export from SAP.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

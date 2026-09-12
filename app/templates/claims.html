@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Claims & Commission{% endblock %}
+{% block content %}
+<h3 class="mb-1">Claims &amp; Commission — from JSW <span class="badge bg-danger">Admin only</span></h3>
+<p class="text-muted mb-2">Showing: <strong>{{ "All Godowns" if showing_all_godowns else (active_godown.name if active_godown else "—") }}</strong></p>
+<p class="text-muted">This page is only visible to admin users. It shows what to claim from JSW (handling commission + secondary freight) — note the freight rate claimed from the company is intentionally different from the rate you actually pay the transporter, shown on the Freight page.</p>
+
+<div class="card p-3 mb-4 filter-card">
+  <form method="get" action="/claims" class="row g-2 align-items-center">
+    <div class="col-md-3">
+      <select class="form-select" name="month" onchange="this.form.submit()">
+        <option value="">All-time</option>
+        {% for m in months %}<option value="{{ m }}" {{ "selected" if report.month == m }}>{{ m }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 form-check d-flex align-items-center">
+      <input class="form-check-input me-2" type="checkbox" name="all_godowns" value="1" id="allGodownsCheck" onchange="this.form.submit()" {{ "checked" if showing_all_godowns }}>
+      <label class="form-check-label" for="allGodownsCheck">All Godowns</label>
+    </div>
+  </form>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card p-3 stat">
+      <div class="stat-label">Commission Claimable</div>
+      <div class="stat-value"><span class="unit me-1">₹</span>{{ report.commission_amount|inr }}</div>
+      <div class="stat-note">{{ "%.0f"|format(report.total_bags_dispatched) }} bags &times; ₹{{ report.commission_rate_per_bag }}/bag</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 stat stat-ok">
+      <div class="stat-label">Secondary Freight Claimable</div>
+      <div class="stat-value pos"><span class="unit me-1">₹</span>{{ report.freight_claimable_from_company|inr }}</div>
+      <div class="stat-note">Billed to JSW at the company rate card</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 stat">
+      <div class="stat-label">Total Claim from JSW</div>
+      <div class="stat-value accent"><span class="unit me-1">₹</span>{{ report.total_claim_from_company|inr }}</div>
+      <div class="stat-note">Commission + secondary freight</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card p-3 stat stat-mute">
+      <div class="stat-label">Freight Actually Paid to Transporters</div>
+      <div class="stat-value"><span class="unit me-1">₹</span>{{ report.freight_paid_to_transporters|inr }}</div>
+      <div class="stat-note">At your transporter rate card</div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 stat {{ 'stat-ok' if report.freight_margin >= 0 else 'stat-bad' }}">
+      <div class="stat-label">Your Freight Margin</div>
+      <div class="stat-value {{ 'pos' if report.freight_margin >= 0 else 'neg' }}"><span class="unit me-1">₹</span>{{ report.freight_margin|inr }}</div>
+      <div class="stat-note">Claimable from JSW minus paid to transporters</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <h5>Commission Rate</h5>
+  <form method="post" action="/claims/commission-rate" class="row g-2">
+    <div class="col-md-3"><input class="form-control" type="number" step="0.01" name="commission_rate_per_bag" value="{{ commission_rate }}" required></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Update ₹/bag</button></div>
+  </form>
+  <p class="small text-muted mt-2 mb-0">Confirm this matches your actual C&amp;F agreement with JSW.</p>
+</div>
+{% endblock %}

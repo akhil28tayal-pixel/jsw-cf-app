@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Stock{% endblock %}
+{% block content %}
+<h3 class="mb-1">Godown Stock</h3>
+<p class="text-muted mb-4">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+
+<div class="card p-3 mb-4">
+  <h5>Set / Update Opening Stock</h5>
+  <p class="small text-muted">Set this once per product when you start using the app, or whenever you need to re-baseline after a physical count. Everything from this date onward is added/subtracted automatically from GRN and Dispatch entries.</p>
+  <form method="post" action="/stock/opening" class="row g-2">
+    <div class="col-md-4">
+      <select class="form-select" name="product_id" required>
+        {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="Opening Stock (Bags)" required></div>
+    <div class="col-md-3"><input class="form-control" type="date" name="as_of_date" required></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Save</button></div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h5>Current Stock (live)</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Product</th><th class="num">Bag</th><th class="num">Opening (Bags)</th><th>As of</th><th class="num">Received Since</th><th class="num">Dispatched Since</th><th class="num">Current (Bags)</th><th class="num">Current (MT)</th></tr></thead>
+    <tbody>
+    {% for s in stock %}
+      <tr>
+        <td>{{ s.product.name }}</td>
+        <td class="num text-muted">{{ s.bag_weight_kg }} kg</td>
+        <td class="num">{{ "%.0f"|format(s.opening_bags) }}</td>
+        <td class="doc">{{ s.as_of_date }}</td>
+        <td class="num">{{ "%.0f"|format(s.received_bags) }}</td>
+        <td class="num">{{ "%.0f"|format(s.dispatched_bags) }}</td>
+        <td class="num fw-bold">{{ "%.0f"|format(s.current_bags) }}</td>
+        <td class="num">{{ "%.2f"|format(s.current_mt) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

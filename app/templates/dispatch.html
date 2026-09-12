@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Dispatch{% endblock %}
+{% block content %}
+<h3 class="mb-1">Dispatch — Secondary Transportation</h3>
+<p class="text-muted mb-4">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+
+<div class="card p-3 mb-4">
+  <h5>New Dispatch</h5>
+  <form method="post" action="/dispatch/add" class="row g-2">
+    <div class="col-md-2"><input class="form-control" type="date" name="date" required></div>
+    <div class="col-md-2"><input class="form-control" name="dc_no" placeholder="DC/Invoice No."></div>
+
+    <div class="col-md-2">
+      <select class="form-select" name="dealer_name">
+        <option value="">-- select dealer --</option>
+        {% for d in dealers %}<option value="{{ d.name }}">{{ d.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><input class="form-control" name="new_dealer" placeholder="...or new dealer name"></div>
+
+    <div class="col-md-2">
+      <select class="form-select" name="product_id" required>
+        <option value="" disabled selected>Product</option>
+        {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><input class="form-control" type="number" step="1" name="bags" placeholder="Bags Dispatched" required></div>
+
+    <div class="col-md-2"><input class="form-control" name="destination" placeholder="Destination / Site"></div>
+    <div class="col-md-2" list="district-list"><input class="form-control" name="district" placeholder="District (for freight)" list="district-list"></div>
+    <datalist id="district-list">{% for d in districts %}<option value="{{ d }}">{% endfor %}</datalist>
+    <div class="col-md-2"><input class="form-control" name="pincode" placeholder="Pincode (for freight)"></div>
+    <div class="col-md-2"><input class="form-control" name="vehicle_no" placeholder="Vehicle No."></div>
+
+    <div class="col-md-3">
+      <select class="form-select" name="transporter_name">
+        <option value="">-- select transporter --</option>
+        {% for t in transporters %}<option value="{{ t.name }}">{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><input class="form-control" name="new_transporter" placeholder="...or new transporter name"></div>
+    <div class="col-md-4"><input class="form-control" name="remarks" placeholder="Remarks"></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Save Dispatch</button></div>
+  </form>
+  <p class="small text-muted mt-2 mb-0">Enter District and/or Pincode so the Freight report (and the Claims page) can rate this truck automatically. New dealers/transporters typed here are added to the master list on the fly.</p>
+</div>
+
+<div class="card p-3 mb-4 filter-card">
+  <h5>Filter</h5>
+  <form method="get" action="/dispatch" class="row g-2">
+    <div class="col-md-2"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From"></div>
+    <div class="col-md-2"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To"></div>
+    <div class="col-md-2">
+      <select class="form-select" name="product_id">
+        <option value="">All Products</option>
+        {% for p in products %}<option value="{{ p.id }}" {{ "selected" if sel_product == p.id }}>{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select class="form-select" name="dealer_id">
+        <option value="">All Dealers</option>
+        {% for d in dealers %}<option value="{{ d.id }}" {{ "selected" if sel_dealer == d.id }}>{{ d.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select class="form-select" name="transporter_id">
+        <option value="">All Transporters</option>
+        {% for t in transporters %}<option value="{{ t.id }}" {{ "selected" if sel_transporter == t.id }}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><input class="form-control" name="vehicle_no" value="{{ vehicle_no }}" placeholder="Vehicle No."></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h5>Dispatches {{ "(filtered)" if date_from or date_to or sel_product or sel_dealer or sel_transporter or vehicle_no }}</h5>
+  <div class="table-responsive table-scroll">
+  <table class="table table-hover">
+    <thead><tr><th>Date</th><th>DC No.</th><th>Dealer</th><th>Product</th><th class="num">Bags</th><th>Destination</th><th>District</th><th>Vehicle</th><th>Transporter</th><th></th></tr></thead>
+    <tbody>
+    {% for d in entries %}
+      <tr>
+        <td class="doc">{{ d.date }}</td><td class="doc">{{ d.dc_no or "-" }}</td><td>{{ d.dealer.name }}</td><td>{{ d.product.name }}</td>
+        <td class="num fw-bold">{{ d.bags|int }}</td><td>{{ d.destination or "-" }}</td><td>{{ d.district or "-" }}</td>
+        <td class="doc">{{ d.vehicle_no or "-" }}</td><td>{{ d.transporter.name if d.transporter else "-" }}</td>
+        <td><a href="/dispatch/{{ d.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+          <form method="post" action="/dispatch/{{ d.id }}/delete" class="d-inline"
+                onsubmit="return confirm('Delete this dispatch of {{ d.bags|int }} bags to {{ d.dealer.name }} on {{ d.date }}? This cannot be undone.');">
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="text-center text-muted">No dispatches recorded yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

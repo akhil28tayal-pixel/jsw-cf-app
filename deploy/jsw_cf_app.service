@@ -1,0 +1,21 @@
+[Unit]
+Description=JSW C&F Operations App
+After=network.target
+
+[Service]
+Type=simple
+User=jswcf
+Group=jswcf
+WorkingDirectory=/opt/jsw_cf_app
+EnvironmentFile=/opt/jsw_cf_app/.env
+ExecStart=/opt/jsw_cf_app/venv/bin/gunicorn app.main:app \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --workers 1 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile /var/log/jsw_cf_app/access.log \
+    --error-logfile /var/log/jsw_cf_app/error.log
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

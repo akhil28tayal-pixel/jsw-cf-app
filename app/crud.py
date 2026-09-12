@@ -1,0 +1,388 @@
+import datetime as dt
+from collections import defaultdict
+from typing import Optional
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app import models
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+DEFAULT_SETTINGS = {
+    "bag_weight_mt": "0.05",              # 50kg bag = 0.05 MT
+    "commission_rate_per_bag": "2.5",     # ₹ per bag dispatched, claimed from JSW
+}
+
+
+def get_setting(db: Session, key: str) -> str:
+    row = db.query(models.Setting).filter(models.Setting.key == key).first()
+    if row:
+        return row.value
+    return DEFAULT_SETTINGS.get(key, "")
+
+
+def set_setting(db: Session, key: str, value: str) -> None:
+    row = db.query(models.Setting).filter(models.Setting.key == key).first()
+    if row:
+        row.value = value
+    else:
+        row = models.Setting(key=key, value=value)
+        db.add(row)
+    db.commit()
+
+
+def bag_weight_mt(db: Session) -> float:
+    """The house default: a 50 kg cement bag = 0.05 MT."""
+    return float(get_setting(db, "bag_weight_mt") or 0.05)
+
+
+def product_bag_weight_mt(db: Session, product) -> float:
+    """MT per bag FOR THIS PRODUCT. Bag size is a property of the product, not
+    of the company: JSW Microfine is a 20 kg bag (0.02 MT — 50 bags to the
+    tonne), while the cements are 50 kg. A product with nothing set falls back
+    to the global setting, so this is only ever a correction, never a surprise.
+
+    Everything that crosses between bags and tonnes goes through here — stock
+    in MT, the MT→bags conversion on SAP import, and the freight weight a
+    truck is rated on — so one product's bag size can't be right in one place
+    and wrong in another."""
+    weight = getattr(product, "bag_weight_mt", None) if product is not None else None
+    if weight:
+        return float(weight)
+    return bag_weight_mt(db)
+
+
+def commission_rate_per_bag(db: Session) -> float:
+    return float(get_setting(db, "commission_rate_per_bag") or 0)
+
+
+# ---------------------------------------------------------------------------
+# Masters: Godown / Product / Dealer / Transporter (identical shape, small helpers)
+#
+# Godowns, like Dealers and Transporters, are a shared master list — but
+# unlike them, "which godown" is also the scoping dimension for every
+# stock/GRN/dispatch/billing/freight-rate row. list_godowns()/add_godown()
+# manage the master list itself; the active godown for a given request is
+# resolved separately in app/godown_context.py.
+# ---------------------------------------------------------------------------
+def _list_active(db: Session, model):
+    return db.query(model).filter(model.active == True).order_by(model.name).all()  # noqa: E712
+
+
+def _get_or_create(db: Session, model, name: str):
+    name = name.strip()
+    obj = db.query(model).filter(func.lower(model.name) == name.lower()).first()
+    if obj:
+        if not obj.active:
+            obj.active = True
+            db.commit()
+        return obj
+    obj = model(name=name)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def list_godowns(db: Session):
+    return _list_active(db, models.Godown)
+
+
+def add_godown(db: Session, name: str):
+    return _get_or_create(db, models.Godown, name)
+
+
+def list_products(db: Session):
+    return _list_active(db, models.Product)
+
+
+def add_product(db: Session, name: str, bag_weight_kg: Optional[float] = None):
+    product = _get_or_create(db, models.Product, name)
+    if bag_weight_kg:
+        set_product_bag_weight_kg(db, product, bag_weight_kg)
+    return product
+
+
+def set_product_bag_weight_kg(db: Session, product, bag_weight_kg: Optional[float]):
+    """Bag size is entered in kg (what's printed on the bag) and stored in MT
+    (what every calculation uses). Blank/zero clears it back to the default."""
+    if product is None:
+        return None
+    product.bag_weight_mt = (float(bag_weight_kg) / 1000.0) if bag_weight_kg else None
+    db.commit()
+    return product
+
+
+def list_dealers(db: Session):
+    return _list_active(db, models.Dealer)
+
+
+def add_dealer(db: Session, name: str):
+    return _get_or_create(db, models.Dealer, name)
+
+
+def list_transporters(db: Session):
+    return _list_active(db, models.Transporter)
+
+
+def add_transporter(db: Session, name: str, contact: Optional[str] = None):
+    t = _get_or_create(db, models.Transporter, name)
+    if contact:
+        t.contact = contact
+        db.commit()
+    return t
+
+
+# ---------------------------------------------------------------------------
+# Opening stock & current stock (computed, never stored as a mutable balance —
+# this avoids the classic bug where a running balance quietly drifts out of
+# sync with the transactions that are supposed to explain it)
+#
+# Every one of these is scoped to a single godown — Manesar's stock and
+# Daultabad's stock are independent, computed the same way, from each
+# godown's own GRN/Dispatch rows.
+# ---------------------------------------------------------------------------
+def upsert_opening_stock(db: Session, godown_id: int, product_id: int, bags: float, as_of_date: dt.date):
+    row = db.query(models.OpeningStock).filter(
+        models.OpeningStock.godown_id == godown_id, models.OpeningStock.product_id == product_id
+    ).first()
+    if row:
+        row.bags = bags
+        row.as_of_date = as_of_date
+    else:
+        row = models.OpeningStock(godown_id=godown_id, product_id=product_id, bags=bags, as_of_date=as_of_date)
+        db.add(row)
+    db.commit()
+
+
+def get_current_stock(db: Session, godown_id: int):
+    """Current stock per active product, for ONE godown = opening balance +
+    every GRN receipt on/after the opening date - every dispatch on/after
+    the opening date, all scoped to that godown."""
+    results = []
+    for product in list_products(db):
+        bw = product_bag_weight_mt(db, product)
+        opening = db.query(models.OpeningStock).filter(
+            models.OpeningStock.godown_id == godown_id, models.OpeningStock.product_id == product.id
+        ).first()
+        opening_bags = opening.bags if opening else 0.0
+        as_of = opening.as_of_date if opening else dt.date(1970, 1, 1)
+
+        received = db.query(func.coalesce(func.sum(models.GRN.bags_received), 0.0)).filter(
+            models.GRN.godown_id == godown_id, models.GRN.product_id == product.id, models.GRN.date >= as_of
+        ).scalar()
+        dispatched = db.query(func.coalesce(func.sum(models.Dispatch.bags), 0.0)).filter(
+            models.Dispatch.godown_id == godown_id, models.Dispatch.product_id == product.id,
+            models.Dispatch.date >= as_of
+        ).scalar()
+
+        current_bags = opening_bags + received - dispatched
+        results.append({
+            "product": product,
+            "opening_bags": opening_bags,
+            "as_of_date": as_of,
+            "received_bags": received,
+            "dispatched_bags": dispatched,
+            "current_bags": current_bags,
+            "current_mt": current_bags * bw,
+            "bag_weight_kg": round(bw * 1000),
+        })
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Requirement #5 — Dealer-wise / product-wise Advance & Hold reconciliation
+#
+# Running balance per (dealer, product[, godown]) = total billed bags - total
+# dispatched bags, across ALL transactions to date (order doesn't matter — a
+# running net balance self-corrects the moment a matching entry on the other
+# side shows up).
+#   balance > 0  -> billed ahead of dispatch  -> ADVANCE (owed to dealer)
+#   balance < 0  -> dispatched ahead of billing -> HOLD  (owed to JSW/company)
+#   balance == 0 -> settled
+#
+# godown_id=None combines both godowns for this dealer/product — useful for
+# total exposure to a dealer regardless of which location served them.
+# ---------------------------------------------------------------------------
+def get_dealer_advance_hold(db: Session, dealer_id: Optional[int] = None, product_id: Optional[int] = None,
+                             godown_id: Optional[int] = None):
+    billed = defaultdict(float)
+    dispatched = defaultdict(float)
+
+    bq = db.query(models.Billing.dealer_id, models.Billing.product_id, func.sum(models.Billing.bags))
+    dq = db.query(models.Dispatch.dealer_id, models.Dispatch.product_id, func.sum(models.Dispatch.bags))
+    if godown_id:
+        bq = bq.filter(models.Billing.godown_id == godown_id)
+        dq = dq.filter(models.Dispatch.godown_id == godown_id)
+    bq = bq.group_by(models.Billing.dealer_id, models.Billing.product_id)
+    dq = dq.group_by(models.Dispatch.dealer_id, models.Dispatch.product_id)
+
+    for d_id, p_id, total in bq.all():
+        billed[(d_id, p_id)] = total or 0.0
+    for d_id, p_id, total in dq.all():
+        dispatched[(d_id, p_id)] = total or 0.0
+
+    keys = set(billed) | set(dispatched)
+    dealers = {d.id: d for d in db.query(models.Dealer).all()}
+    products = {p.id: p for p in db.query(models.Product).all()}
+
+    rows = []
+    for (d_id, p_id) in keys:
+        if dealer_id and d_id != dealer_id:
+            continue
+        if product_id and p_id != product_id:
+            continue
+        b = billed.get((d_id, p_id), 0.0)
+        disp = dispatched.get((d_id, p_id), 0.0)
+        balance = b - disp
+        if balance > 1e-6:
+            status = "Advance"
+        elif balance < -1e-6:
+            status = "Hold"
+        else:
+            status = "Settled"
+        rows.append({
+            "dealer": dealers.get(d_id),
+            "product": products.get(p_id),
+            "billed_bags": b,
+            "dispatched_bags": disp,
+            "balance_bags": balance,
+            "status": status,
+        })
+    rows.sort(key=lambda r: (r["dealer"].name if r["dealer"] else "", r["product"].name if r["product"] else ""))
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Requirement #6 — Truck-wise / transporter-wise freight, rated by district/pincode
+#
+# Rate cards are godown-specific (freight from Manesar to a district is a
+# different number than freight from Daultabad to the same district).
+# ---------------------------------------------------------------------------
+def find_rate_card(db: Session, godown_id: int, district: Optional[str], pincode: Optional[str]):
+    q = db.query(models.FreightRateCard).filter(models.FreightRateCard.godown_id == godown_id)
+    if pincode:
+        row = q.filter(models.FreightRateCard.pincode == pincode).first()
+        if row:
+            return row
+    if district:
+        row = q.filter(
+            func.lower(models.FreightRateCard.district) == district.strip().lower(),
+            models.FreightRateCard.pincode.is_(None),
+        ).first()
+        if row:
+            return row
+        row = q.filter(func.lower(models.FreightRateCard.district) == district.strip().lower()).first()
+        if row:
+            return row
+    return None
+
+
+def get_dispatch_freight_rows(db: Session, godown_id: Optional[int] = None, date_from=None, date_to=None):
+    q = db.query(models.Dispatch)
+    if godown_id:
+        q = q.filter(models.Dispatch.godown_id == godown_id)
+    if date_from:
+        q = q.filter(models.Dispatch.date >= date_from)
+    if date_to:
+        q = q.filter(models.Dispatch.date <= date_to)
+
+    rows = []
+    for d in q.order_by(models.Dispatch.date).all():
+        rate = find_rate_card(db, d.godown_id, d.district, d.pincode)
+        # Freight is charged per MT, so the truck's weight has to use the bag
+        # size of the product actually on it — 400 bags of Microfine is 8 MT,
+        # not 20 MT.
+        weight_mt = (d.bags or 0) * product_bag_weight_mt(db, d.product)
+        transporter_rate = rate.transporter_rate_per_mt if rate else None
+        company_rate = rate.company_claim_rate_per_mt if rate else None
+        rows.append({
+            "dispatch": d,
+            "weight_mt": weight_mt,
+            "rate_found": rate is not None,
+            "transporter_rate_per_mt": transporter_rate,
+            "company_rate_per_mt": company_rate,
+            "freight_payable": (weight_mt * transporter_rate) if transporter_rate is not None else None,
+            "freight_claimable": (weight_mt * company_rate) if company_rate is not None else None,
+        })
+    return rows
+
+
+def _aggregate_freight(rows, key_fn):
+    agg = defaultdict(lambda: {"bags": 0.0, "weight_mt": 0.0, "freight_payable": 0.0,
+                                "freight_claimable": 0.0, "trips": 0, "missing_rate": 0})
+    for r in rows:
+        a = agg[key_fn(r)]
+        a["bags"] += r["dispatch"].bags or 0
+        a["weight_mt"] += r["weight_mt"]
+        a["trips"] += 1
+        if r["freight_payable"] is not None:
+            a["freight_payable"] += r["freight_payable"]
+        else:
+            a["missing_rate"] += 1
+        if r["freight_claimable"] is not None:
+            a["freight_claimable"] += r["freight_claimable"]
+    return dict(sorted(agg.items()))
+
+
+def get_truck_wise_report(db: Session, godown_id: Optional[int] = None, date_from=None, date_to=None):
+    rows = get_dispatch_freight_rows(db, godown_id, date_from, date_to)
+    return _aggregate_freight(rows, lambda r: r["dispatch"].vehicle_no or "(no vehicle no.)")
+
+
+def get_transporter_wise_report(db: Session, godown_id: Optional[int] = None, date_from=None, date_to=None):
+    rows = get_dispatch_freight_rows(db, godown_id, date_from, date_to)
+    return _aggregate_freight(rows, lambda r: r["dispatch"].transporter.name if r["dispatch"].transporter else "(no transporter)")
+
+
+# ---------------------------------------------------------------------------
+# Requirement #7 — Commission & secondary-freight claim vs JSW (PROTECTED page)
+# ---------------------------------------------------------------------------
+def get_claims_report(db: Session, godown_id: Optional[int] = None, month: Optional[str] = None):
+    """month: 'YYYY-MM' string, or None for all-time totals.
+    godown_id: None combines both godowns into one claim total."""
+    dq = db.query(models.Dispatch)
+    if godown_id:
+        dq = dq.filter(models.Dispatch.godown_id == godown_id)
+    start = end = None
+    if month:
+        y, m = month.split("-")
+        start = dt.date(int(y), int(m), 1)
+        end = dt.date(int(y) + (1 if int(m) == 12 else 0), 1 if int(m) == 12 else int(m) + 1, 1)
+        dq = dq.filter(models.Dispatch.date >= start, models.Dispatch.date < end)
+
+    total_bags = dq.with_entities(func.coalesce(func.sum(models.Dispatch.bags), 0.0)).scalar()
+    rate = commission_rate_per_bag(db)
+    commission_amount = total_bags * rate
+
+    rows = get_dispatch_freight_rows(
+        db, godown_id=godown_id,
+        date_from=start if month else None,
+        date_to=(end - dt.timedelta(days=1)) if month else None,
+    )
+    freight_paid = sum(r["freight_payable"] for r in rows if r["freight_payable"] is not None)
+    freight_claimable = sum(r["freight_claimable"] for r in rows if r["freight_claimable"] is not None)
+    freight_margin = freight_claimable - freight_paid
+
+    return {
+        "month": month,
+        "total_bags_dispatched": total_bags,
+        "commission_rate_per_bag": rate,
+        "commission_amount": commission_amount,
+        "freight_paid_to_transporters": freight_paid,
+        "freight_claimable_from_company": freight_claimable,
+        "freight_margin": freight_margin,
+        "total_claim_from_company": commission_amount + freight_claimable,
+    }
+
+
+def list_available_months(db: Session, godown_id: Optional[int] = None):
+    """Distinct YYYY-MM months that have dispatch data, most recent first."""
+    q = db.query(models.Dispatch.date).distinct()
+    if godown_id:
+        q = q.filter(models.Dispatch.godown_id == godown_id)
+    dates = q.all()
+    months = sorted({f"{d[0].year:04d}-{d[0].month:02d}" for d in dates if d[0]}, reverse=True)
+    return months

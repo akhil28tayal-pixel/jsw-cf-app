@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a1b30">
+    <title>{% block title %}JSW C&F Operations{% endblock %}</title>
+    <link href="/static/vendor/bootstrap.min.css?v={{ asset_v }}" rel="stylesheet">
+    <link href="/static/style.css?v={{ asset_v }}" rel="stylesheet">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% if user %}
+{% set path = request.url.path %}
+<nav class="navbar navbar-expand-lg navbar-dark app-nav sticky-top">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand" href="/">
+      <span class="brand-mark">AT</span>
+      <span class="brand-text">
+        <span class="brand-title">JSW C&amp;F Operations</span>
+        <span class="brand-sub">A T Trading Co</span>
+      </span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navMain">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item"><a class="nav-link {{ 'active' if path == '/' }}" href="/">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/stock') }}" href="/stock">Stock</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/grn') }}" href="/grn">GRN</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/dispatch') }}" href="/dispatch">Dispatch</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/billing') }}" href="/billing">Billing</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/import') }}" href="/import">SAP Import</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/dealer-report') }}" href="/dealer-report">Advance/Hold</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/freight') }}" href="/freight">Freight</a></li>
+        {% if user.role == "admin" %}
+        <li class="nav-sep d-none d-lg-block"></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/claims') }}" href="/claims">Claims</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/products') }}" href="/products">Masters</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if path.startswith('/backup') }}" href="/backup">Backup</a></li>
+        {% endif %}
+      </ul>
+      <div class="nav-tools">
+        {% if all_godowns %}
+        <form method="post" action="/set-godown" class="godown-switch">
+          <input type="hidden" name="redirect_to" value="{{ request.url.path }}">
+          <span class="godown-label">Godown</span>
+          <select class="form-select form-select-sm" name="godown_id" onchange="this.form.submit()" style="width: auto;">
+            {% for g in all_godowns %}
+              <option value="{{ g.id }}" {{ "selected" if active_godown and active_godown.id == g.id }}>{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        {% endif %}
+        <div class="user-chip" title="{{ user.username }} ({{ user.role }})">
+          <span class="avatar">{{ user.username[:2] }}</span>
+          <span class="user-text">
+            <span class="uname">{{ user.username }}</span>
+            <span class="role">{{ user.role }}</span>
+          </span>
+        </div>
+        <a class="btn btn-logout" href="/logout">Log out</a>
+      </div>
+    </div>
+  </div>
+</nav>
+{% endif %}
+
+<main class="page container-fluid">
+  {% if user %}
+    {% for msg in flashes %}
+      <div class="alert alert-{{ 'danger' if msg.category == 'error' else msg.category }} alert-dismissible fade show" role="alert">
+        {{ msg.message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% block content %}{% endblock %}
+
+  {% if user %}
+  <div class="page-foot">
+    <span>JSW C&amp;F Operations — A T Trading Co</span>
+    <span>{{ active_godown.name if active_godown else "" }}</span>
+  </div>
+  {% endif %}
+</main>
+
+<script src="/static/vendor/bootstrap.bundle.min.js?v={{ asset_v }}"></script>
+</body>
+</html>

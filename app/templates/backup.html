@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Backup{% endblock %}
+{% block content %}
+<h3 class="mb-4">Backup &amp; Export <span class="badge bg-danger">Admin only</span></h3>
+
+<div class="card p-3 mb-4">
+  <h5>What's in the database right now</h5>
+  <table class="table table-hover">
+    <tbody>
+    {% for label, count in counts.items() %}
+      <tr><td>{{ label }}</td><td class="num fw-bold">{{ count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_sqlite %}
+<div class="card p-3 mb-4">
+  <h5>Full Database Backup</h5>
+  <p class="small text-muted">Downloads a complete, point-in-time copy of every table — products, dealers, GRN, dispatch, billing, users, everything. This is the file to keep safe. Do this regularly, and definitely before any update to the app.</p>
+  <a href="/backup/download-db" class="btn btn-primary">Download Full Backup (.db file)</a>
+  <p class="small text-muted mt-2 mb-0">
+    <strong>To restore it later:</strong> stop the app, replace the file at <code>data/jsw_cf.db</code>
+    (inside the Docker volume, or on disk if running without Docker) with this downloaded file, then start
+    the app again.
+  </p>
+</div>
+{% else %}
+<div class="alert alert-info">This deployment uses a non-SQLite database. Back it up using your database's own dump tool (e.g. <code>pg_dump</code> for Postgres) instead of the button above.</div>
+{% endif %}
+
+<div class="card p-3">
+  <h5>Export Individual Reports as CSV</h5>
+  <p class="small text-muted">Useful for sharing a specific report (e.g. with JSW or an accountant) without handing over the whole database.</p>
+  <div class="d-flex gap-2">
+    <a href="/backup/export/grn" class="btn btn-outline-secondary">GRN (CSV)</a>
+    <a href="/backup/export/dispatch" class="btn btn-outline-secondary">Dispatch (CSV)</a>
+    <a href="/backup/export/billing" class="btn btn-outline-secondary">Billing (CSV)</a>
+  </div>
+</div>
+{% endblock %}

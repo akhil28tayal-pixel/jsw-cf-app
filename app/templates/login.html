@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Login — JSW C&F Ops{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<div class="login-shell">
+  <div class="login-card">
+    <div class="text-center">
+      <span class="brand-mark">AT</span>
+      <div class="login-title">JSW C&amp;F Operations</div>
+      <div class="login-sub">A T Trading Co</div>
+    </div>
+
+    {% for msg in flashes %}
+      <div class="alert alert-{{ 'danger' if msg.category == 'error' else msg.category }} py-2">{{ msg.message }}</div>
+    {% endfor %}
+
+    <form method="post" action="/login">
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input class="form-control" name="username" required autofocus>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input class="form-control" type="password" name="password" required>
+      </div>
+      <button class="btn btn-primary w-100" type="submit">Log in</button>
+    </form>
+
+    <div class="login-foot">Godown operations · stock, dispatch, billing and claims</div>
+  </div>
+</div>
+{% endblock %}

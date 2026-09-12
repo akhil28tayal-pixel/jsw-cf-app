@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Edit Dispatch{% endblock %}
+{% block content %}
+<h3 class="mb-1">Edit Dispatch #{{ entry.id }}</h3>
+<p class="text-muted mb-4">Godown: <strong>{{ entry.godown.name if entry.godown else "—" }}</strong> (not editable — delete and re-add to move it to a different godown)</p>
+
+<div class="card p-3 mb-4">
+  <h5>Dispatch Details</h5>
+  <form method="post" action="/dispatch/{{ entry.id }}/edit" class="row g-2">
+    <div class="col-md-2"><input class="form-control" type="date" name="date" value="{{ entry.date }}" required></div>
+    <div class="col-md-2"><input class="form-control" name="dc_no" value="{{ entry.dc_no or '' }}" placeholder="DC/Invoice No."></div>
+
+
+    <div class="col-md-2">
+      <select class="form-select" name="dealer_name">
+        <option value="">-- select dealer --</option>
+        {% for d in dealers %}<option value="{{ d.name }}" {{ "selected" if entry.dealer and entry.dealer.id == d.id }}>{{ d.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><input class="form-control" name="new_dealer" placeholder="...or new dealer name"></div>
+
+    <div class="col-md-2">
+      <select class="form-select" name="product_id" required>
+        {% for p in products %}<option value="{{ p.id }}" {{ "selected" if entry.product_id == p.id }}>{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><input class="form-control" type="number" step="1" name="bags" value="{{ entry.bags|int }}" placeholder="Bags Dispatched" required></div>
+
+    <div class="col-md-2"><input class="form-control" name="destination" value="{{ entry.destination or '' }}" placeholder="Destination / Site"></div>
+    <div class="col-md-2"><input class="form-control" name="district" value="{{ entry.district or '' }}" placeholder="District (for freight)" list="district-list"></div>
+    <datalist id="district-list">{% for d in districts %}<option value="{{ d }}">{% endfor %}</datalist>
+    <div class="col-md-2"><input class="form-control" name="pincode" value="{{ entry.pincode or '' }}" placeholder="Pincode (for freight)"></div>
+    <div class="col-md-2"><input class="form-control" name="vehicle_no" value="{{ entry.vehicle_no or '' }}" placeholder="Vehicle No."></div>
+
+    <div class="col-md-3">
+      <select class="form-select" name="transporter_name">
+        <option value="">-- select transporter --</option>
+        {% for t in transporters %}<option value="{{ t.name }}" {{ "selected" if entry.transporter and entry.transporter.id == t.id }}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><input class="form-control" name="new_transporter" placeholder="...or new transporter name"></div>
+    <div class="col-md-4"><input class="form-control" name="remarks" value="{{ entry.remarks or '' }}" placeholder="Remarks"></div>
+
+    <div class="col-md-2"><button class="btn btn-primary w-100">Save Changes</button></div>
+    <div class="col-md-2"><a href="/dispatch" class="btn btn-outline-secondary w-100">Cancel</a></div>
+  </form>
+</div>
+{% endblock %}

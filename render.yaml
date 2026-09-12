@@ -1,0 +1,34 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# Point Render at this repo and it reads this file instead of asking you to
+# fill a form. Everything here is on Render's free plan.
+services:
+  - type: web
+    name: atc-ops          # part of the public URL: atc-ops.onrender.com
+    runtime: python
+    plan: free
+    region: singapore      # closest free region to Delhi
+    buildCommand: pip install -r requirements.txt
+    # $PORT is assigned by Render; binding anywhere else fails the deploy.
+    # Two workers is comfortable inside the free plan's 512 MB, and is only
+    # safe at all because the database is Postgres, not SQLite.
+    startCommand: >-
+      gunicorn app.main:app
+      --worker-class uvicorn.workers.UvicornWorker
+      --workers 2
+      --bind 0.0.0.0:$PORT
+      --access-logfile -
+      --error-logfile -
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true    # Render generates one and keeps it secret
+      - key: DATABASE_URL
+        sync: false            # paste the Neon connection string in the dashboard
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Import from SAP{% endblock %}
+{% block content %}
+<h3 class="mb-1">Import from SAP</h3>
+<p class="text-muted mb-2">Imports go into: <strong>{{ active_godown.name if active_godown else "—" }}</strong> — switch godowns from the navbar first if this file is for the other location.</p>
+<p class="text-muted">Download the <strong>Sale</strong> and <strong>Material In</strong> reports from SAP and upload them here. Already-imported rows (matched by Invoice No. / Material Document) are skipped automatically, so it's safe to re-upload a file that overlaps with a previous one — nothing gets duplicated.</p>
+
+{% if unmapped %}
+<div class="card p-3 mb-4 border-warning">
+  <h5 class="text-warning">⚠ SAP Product Codes Needing Mapping</h5>
+  <p class="small text-muted">These codes showed up in an import but don't match any product yet. Rows using them were skipped. Map each one to a product (or mark it "ignore" if it's not something you stock, like a raw-material code) — then re-upload the same file to pull those rows in.</p>
+  <table class="table table-sm">
+    <thead><tr><th>SAP Code</th><th>Description (from SAP)</th><th>Map to Product</th><th></th></tr></thead>
+    <tbody>
+    {% for u in unmapped %}
+      <tr>
+        <td><code>{{ u.sap_code }}</code></td>
+        <td>{{ u.sap_description or "-" }}</td>
+        <td colspan="2">
+          <form method="post" action="/import/map-product" class="d-flex gap-2">
+            <input type="hidden" name="sap_code" value="{{ u.sap_code }}">
+            <select class="form-select form-select-sm" name="product_id">
+              <option value="">-- ignore this code --</option>
+              {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-sm btn-primary">Save</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h5>Sale Export &rarr; Billing</h5>
+      <p class="small text-muted">Maps: Invoice No., Invoice Date, Sold-To Party/Name, Product, Qty (MT &rarr; bags), Total Value.</p>
+      <form method="post" action="/import/sale" enctype="multipart/form-data" class="d-flex gap-2">
+        <input class="form-control" type="file" name="file" accept=".xlsx,.xls" required>
+        <button class="btn btn-primary">Upload &amp; Import</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h5>Material In Export &rarr; GRN</h5>
+      <p class="small text-muted">Maps: Material Document, Posting Date, Truck No., Product, Qty (MT &rarr; bags), Supplying Plant. Rows still "Stock in Transit" are skipped until they show as received.</p>
+      <form method="post" action="/import/material-in" enctype="multipart/form-data" class="d-flex gap-2">
+        <input class="form-control" type="file" name="file" accept=".xlsx,.xls" required>
+        <button class="btn btn-primary">Upload &amp; Import</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <h5>Recent Imports</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>When</th><th>Type</th><th>Godown</th><th>File</th><th class="num">Total Rows</th><th class="num">Imported</th><th class="num">Duplicate</th><th class="num">Unmapped</th><th class="num">Pending/In-Transit</th><th class="num">Other Skipped</th></tr></thead>
+    <tbody>
+    {% for l in logs %}
+      <tr>
+        <td>{{ l.imported_at.strftime("%d-%b-%y %H:%M") }}</td>
+        <td>{{ "Sale → Billing" if l.import_type == "sale" else "Material In → GRN" }}</td>
+        <td>{{ l.godown.name if l.godown else "-" }}</td>
+        <td>{{ l.filename or "-" }}</td>
+        <td class="num">{{ l.rows_total }}</td>
+        <td class="num fw-bold text-success">{{ l.rows_imported }}</td>
+        <td class="num">{{ l.rows_skipped_duplicate }}</td>
+        <td class="num">{{ l.rows_skipped_unmapped }}</td>
+        <td class="num">{{ l.rows_skipped_pending }}</td>
+        <td class="num">{{ l.rows_skipped_other }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="text-center text-muted">No imports yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

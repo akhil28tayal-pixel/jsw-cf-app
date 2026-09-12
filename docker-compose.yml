@@ -1,0 +1,32 @@
+# One-command deployment: `docker compose up -d --build`
+#
+# By default this runs on SQLite, persisted in the named `jsw_cf_data` volume,
+# which is fine for a single-godown, single-machine deployment. If you outgrow
+# that (multiple people hitting it concurrently, or you want off-box backups),
+# uncomment the `db` service below and switch DATABASE_URL to point at it —
+# no application code changes needed, SQLAlchemy handles both.
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - jsw_cf_data:/app/data
+    restart: unless-stopped
+
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: jsw_cf
+  #     POSTGRES_USER: jsw_cf
+  #     POSTGRES_PASSWORD: change-this-password
+  #   volumes:
+  #     - jsw_cf_pg_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+volumes:
+  jsw_cf_data:
+  # jsw_cf_pg_data:

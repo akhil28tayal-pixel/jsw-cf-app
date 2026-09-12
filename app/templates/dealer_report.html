@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Dealer Advance/Hold{% endblock %}
+{% block content %}
+<h3 class="mb-1">Dealer-wise / Product-wise Advance &amp; Hold</h3>
+<p class="text-muted mb-2">
+  Showing: <strong>{{ "All Godowns" if showing_all_godowns else (active_godown.name if active_godown else "—") }}</strong>
+</p>
+<p class="text-muted">
+  <strong>Advance</strong> = billed to the dealer but not yet dispatched (owed to them).
+  <strong>Hold</strong> = dispatched but not yet billed (owed to JSW/you). Balances adjust automatically the moment a matching billing or dispatch entry is made.
+</p>
+
+<div class="card p-3 mb-4 filter-card">
+<form method="get" action="/dealer-report" class="row g-2 align-items-center">
+  <div class="col-md-3">
+    <select class="form-select" name="dealer_id">
+      <option value="">All Dealers</option>
+      {% for d in dealers %}<option value="{{ d.id }}" {{ "selected" if sel_dealer == d.id }}>{{ d.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select class="form-select" name="product_id">
+      <option value="">All Products</option>
+      {% for p in products %}<option value="{{ p.id }}" {{ "selected" if sel_product == p.id }}>{{ p.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select class="form-select" name="godown_id">
+      <option value="">Active Godown ({{ active_godown.name if active_godown else "—" }})</option>
+      {% for g in godowns %}<option value="{{ g.id }}" {{ "selected" if sel_godown == g.id }}>{{ g.name }} only</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 form-check d-flex align-items-center">
+    <input class="form-check-input me-2" type="checkbox" name="all_godowns" value="1" id="allGodownsCheck" {{ "checked" if showing_all_godowns }}>
+    <label class="form-check-label" for="allGodownsCheck">All Godowns</label>
+  </div>
+  <div class="col-md-1"><button class="btn btn-outline-primary w-100">Go</button></div>
+</form>
+</div>
+
+<div class="card p-3">
+  <h5>Dealer Positions</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Dealer</th><th>Product</th><th class="num">Total Billed (Bags)</th><th class="num">Total Dispatched (Bags)</th><th class="num">Balance (Bags)</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.dealer.name if r.dealer else "-" }}</td>
+        <td>{{ r.product.name if r.product else "-" }}</td>
+        <td class="num">{{ "%.0f"|format(r.billed_bags) }}</td>
+        <td class="num">{{ "%.0f"|format(r.dispatched_bags) }}</td>
+        <td class="num fw-bold {{ 'text-danger' if r.balance_bags < 0 else ('text-primary' if r.balance_bags > 0 else '') }}">{{ "%.0f"|format(r.balance_bags) }}</td>
+        <td>
+          {% if r.status == "Advance" %}<span class="badge badge-advance">Advance</span>
+          {% elif r.status == "Hold" %}<span class="badge badge-hold">Hold</span>
+          {% else %}<span class="badge badge-settled">Settled</span>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="text-center text-muted">No billing or dispatch data yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

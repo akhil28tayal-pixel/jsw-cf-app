@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Freight{% endblock %}
+{% block content %}
+<h3 class="mb-1">Freight Payable — Truck-wise &amp; Transporter-wise</h3>
+<p class="text-muted mb-2">Showing: <strong>{{ "All Godowns" if showing_all_godowns else (active_godown.name if active_godown else "—") }}</strong></p>
+<p class="text-muted">Rated automatically from the Freight Rate Card by pincode (preferred) or district. Trucks marked "rate not set" need a rate card entry — ask an admin to add one under Masters.</p>
+
+<div class="card p-3 mb-4 filter-card">
+<form method="get" action="/freight" class="row g-2 align-items-center">
+  <div class="col-md-3"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From"></div>
+  <div class="col-md-3"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To"></div>
+  <div class="col-md-3 form-check d-flex align-items-center">
+    <input class="form-check-input me-2" type="checkbox" name="all_godowns" value="1" id="allGodownsCheck" {{ "checked" if showing_all_godowns }}>
+    <label class="form-check-label" for="allGodownsCheck">All Godowns</label>
+  </div>
+  <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+</form>
+</div>
+
+<div class="card p-3 mb-4">
+  <h5>By Vehicle</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Vehicle No.</th><th class="num">Trips</th><th class="num">Bags</th><th class="num">Weight (MT)</th><th class="num">Freight Payable (₹)</th><th>Missing Rate</th></tr></thead>
+    <tbody>
+    {% for vehicle, a in truck_report.items() %}
+      <tr>
+        <td class="doc">{{ vehicle }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ "%.0f"|format(a.bags) }}</td>
+        <td class="num">{{ "%.2f"|format(a.weight_mt) }}</td><td class="num fw-bold">{{ a.freight_payable|inr }}</td>
+        <td>{% if a.missing_rate %}<span class="badge bg-warning text-dark">{{ a.missing_rate }} trip(s)</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="text-center text-muted">No dispatch data yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card p-3">
+  <h5>By Transporter</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Transporter</th><th class="num">Trips</th><th class="num">Bags</th><th class="num">Weight (MT)</th><th class="num">Freight Payable (₹)</th><th>Missing Rate</th></tr></thead>
+    <tbody>
+    {% for t, a in transporter_report.items() %}
+      <tr>
+        <td>{{ t }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ "%.0f"|format(a.bags) }}</td>
+        <td class="num">{{ "%.2f"|format(a.weight_mt) }}</td><td class="num fw-bold">{{ a.freight_payable|inr }}</td>
+        <td>{% if a.missing_rate %}<span class="badge bg-warning text-dark">{{ a.missing_rate }} trip(s)</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="text-center text-muted">No dispatch data yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}
