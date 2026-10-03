@@ -209,6 +209,69 @@ class ImportLog(Base):
     godown = relationship("Godown")
 
 
+class SapStockSnapshot(Base):
+    """What SAP says is in the godown, as of one date, for one product.
+
+    This comes from the SAP actual-stock statement, not from our own
+    transactions, which is the whole point: it is the independent figure our
+    computed physical stock gets reconciled against.
+
+    One row per (godown, product, as_of_date) — re-uploading the same
+    statement date replaces the figure instead of adding a second one, the
+    same idea as the Material Document / Invoice No. keys on GRN and Billing.
+
+    Stored in BAGS, like every other quantity in this app. A statement in MT
+    is converted on the way in with the product's own bag weight, so
+    Microfine's 20 kg bag is honoured."""
+    __tablename__ = "sap_stock_snapshot"
+    id = Column(Integer, primary_key=True)
+    godown_id = Column(Integer, ForeignKey("godowns.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    as_of_date = Column(Date, nullable=False, index=True)
+    bags = Column(Float, nullable=False, default=0)
+    source = Column(String(20), nullable=False, default="pdf")  # "pdf" or "manual"
+    filename = Column(String(255), nullable=True)
+    remarks = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+    godown = relationship("Godown")
+    product = relationship("Product")
+
+    __table_args__ = (
+        UniqueConstraint("godown_id", "product_id", "as_of_date", name="uq_sap_stock_godown_product_date"),
+    )
+
+
+class SapStockAdjustment(Base):
+    """A known, permanent discrepancy between SAP stock and physical stock.
+
+    The real case this exists for: material short at a godown handover. SAP
+    still carries stock that physically is not there, and no amount of
+    GRN/dispatch/billing entry will ever close that gap, so it has to be
+    recorded once and then subtracted on every reconciliation.
+
+    `bags` is the SHORTAGE: how many bags SAP over-states by. It is
+    subtracted from the SAP side. A negative value therefore means SAP
+    under-states (an excess), which reconciles the other way.
+
+    Several rows per product are allowed and are summed — one handover, one
+    row, each with its own date and reason, rather than one number that gets
+    silently overwritten and loses its history."""
+    __tablename__ = "sap_stock_adjustment"
+    id = Column(Integer, primary_key=True)
+    godown_id = Column(Integer, ForeignKey("godowns.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    bags = Column(Float, nullable=False, default=0)
+    as_of_date = Column(Date, nullable=True)
+    reason = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+    godown = relationship("Godown")
+    product = relationship("Product")
+
+
 class Setting(Base):
     __tablename__ = "settings"
     key = Column(String(60), primary_key=True)

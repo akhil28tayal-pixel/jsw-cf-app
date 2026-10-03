@@ -7,7 +7,7 @@ from app.database import get_db
 from app.auth import require_admin, hash_password
 from app.flash import flash, get_flashed_messages
 from app.godown_context import get_active_godown
-from app.query_utils import parse_int, parse_float
+from app.query_utils import parse_int, parse_float, parse_date
 from app import crud, models
 
 from app.templating import templates
@@ -47,6 +47,7 @@ def masters_page(request: Request, rate_godown_id: str = Query(None),
                              models.FreightRateCard.pincode).all()
 
     return templates.TemplateResponse(request, "masters.html", {
+        "sap_adjustments": crud.list_sap_adjustments(db),
         "user": user, "flashes": get_flashed_messages(request),
         "godowns": godowns,
         "active_godown": active_godown,
@@ -225,4 +226,29 @@ def toggle_user(user_id: int, db: Session = Depends(get_db), user=Depends(requir
     if u and u.id != user.id:  # can't deactivate yourself
         u.is_active = not u.is_active
         db.commit()
+    return RedirectResponse("/products", status_code=303)
+
+
+@router.post("/sap-adjustment/add")
+def add_sap_adjustment(request: Request, godown_id: int = Form(...), product_id: int = Form(...),
+                        bags: float = Form(...), as_of_date: str = Form(None),
+                        reason: str = Form(None), db: Session = Depends(get_db),
+                        user=Depends(require_admin)):
+    """Record a permanent SAP-vs-physical shortage, e.g. material short at a
+    godown handover. Positive bags = SAP over-states and the figure is
+    subtracted from the SAP side on every reconciliation."""
+    crud.add_sap_adjustment(db, godown_id, product_id, bags,
+                            as_of_date=parse_date(as_of_date), reason=(reason or None),
+                            user_id=user.id)
+    flash(request, "SAP stock adjustment saved.")
+    return RedirectResponse("/products", status_code=303)
+
+
+@router.post("/sap-adjustment/{adjustment_id}/delete")
+def delete_sap_adjustment(adjustment_id: int, request: Request, db: Session = Depends(get_db),
+                           user=Depends(require_admin)):
+    if crud.delete_sap_adjustment(db, adjustment_id):
+        flash(request, "SAP stock adjustment deleted.")
+    else:
+        flash(request, "That adjustment no longer exists.", "warning")
     return RedirectResponse("/products", status_code=303)

@@ -19,6 +19,92 @@
   </form>
 </div>
 
+<div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-baseline">
+    <h5>SAP vs Physical Reconciliation</h5>
+    <a href="/import" class="small">Upload SAP stock statement &rarr;</a>
+  </div>
+  <p class="small text-muted mb-3">
+    SAP drops stock when an invoice is raised, not when the truck leaves — so the two figures
+    differ for reasons that are expected. <strong>Advance</strong> (billed, not yet dispatched) is
+    still in the godown, so it is added to SAP. <strong>Hold</strong> (dispatched, not yet billed)
+    has gone, so it is subtracted. <strong>Shortage</strong> is a permanent gap recorded under
+    Masters, e.g. material short at a godown handover, and is subtracted too.
+    <br>SAP + Advance &minus; Hold &minus; Shortage should equal physical stock. Anything in the
+    Difference column is a real problem — a missed dispatch entry, a billing row not imported,
+    or genuine stock loss.
+  </p>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr>
+      <th>Product</th><th class="num">SAP Stock</th><th>SAP as of</th>
+      <th class="num">+ Advance</th><th class="num">&minus; Hold</th><th class="num">&minus; Shortage</th>
+      <th class="num">= Expected</th><th class="num">Physical</th><th class="num">Difference</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+    {% for r in reconciliation %}
+      <tr>
+        <td>{{ r.product.name }}</td>
+        {% if r.sap_bags is none %}
+          <td class="num text-muted">&mdash;</td>
+          <td class="doc text-muted">no statement</td>
+          <td class="num">{{ "%.0f"|format(r.advance_bags) }}</td>
+          <td class="num">{{ "%.0f"|format(r.hold_bags) }}</td>
+          <td class="num">{{ "%.0f"|format(r.shortage_bags) }}</td>
+          <td class="num text-muted">&mdash;</td>
+          <td class="num fw-bold">{{ "%.0f"|format(r.physical_bags) }}</td>
+          <td class="num text-muted">&mdash;</td>
+          <td><span class="badge bg-secondary">Not uploaded</span></td>
+        {% else %}
+          <td class="num">{{ "%.0f"|format(r.sap_bags) }}</td>
+          <td class="doc">{{ r.sap_as_of }}{% if r.sap_source == "manual" %} <span class="text-muted">(manual)</span>{% endif %}</td>
+          <td class="num text-primary">{{ "%.0f"|format(r.advance_bags) }}</td>
+          <td class="num text-danger">{{ "%.0f"|format(r.hold_bags) }}</td>
+          <td class="num">{{ "%.0f"|format(r.shortage_bags) }}</td>
+          <td class="num">{{ "%.0f"|format(r.expected_bags) }}</td>
+          <td class="num fw-bold">{{ "%.0f"|format(r.physical_bags) }}</td>
+          <td class="num fw-bold {{ '' if r.matched else 'text-danger' }}">{{ "%+.0f"|format(r.difference_bags) }}</td>
+          <td>{% if r.matched %}<span class="badge bg-success">Matched</span>
+              {% else %}<span class="badge bg-danger">Check</span>{% endif %}</td>
+        {% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="text-center text-muted">No products yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
+  <h5>Enter a SAP Stock Figure by Hand</h5>
+  <p class="small text-muted">The PDF upload on the Import page fills these in automatically. Use this when a statement won't parse, or to correct one figure. Re-entering the same product and date replaces the figure rather than adding a second one.</p>
+  <form method="post" action="/stock/sap-figure" class="row g-2">
+    <div class="col-md-4">
+      <select class="form-select" name="product_id" required>
+        {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="SAP Stock (Bags)" required></div>
+    <div class="col-md-3"><input class="form-control" type="date" name="as_of_date" required></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100">Save</button></div>
+  </form>
+  {% if sap_uploads %}
+  <div class="table-responsive mt-3">
+  <table class="table table-sm table-hover mb-0">
+    <thead><tr><th>As of</th><th>Product</th><th class="num">Bags</th><th>Source</th><th>File</th></tr></thead>
+    <tbody>
+    {% for u in sap_uploads %}
+      <tr><td class="doc">{{ u.as_of_date }}</td><td>{{ u.product.name }}</td>
+          <td class="num">{{ "%.0f"|format(u.bags) }}</td><td class="text-muted">{{ u.source }}</td>
+          <td class="doc text-muted">{{ u.filename or "-" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
 <div class="card p-3">
   <h5>Current Stock (live)</h5>
   <div class="table-responsive">

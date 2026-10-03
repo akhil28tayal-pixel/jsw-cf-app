@@ -386,3 +386,147 @@ def list_available_months(db: Session, godown_id: Optional[int] = None):
     dates = q.all()
     months = sorted({f"{d[0].year:04d}-{d[0].month:02d}" for d in dates if d[0]}, reverse=True)
     return months
+
+
+# ---------------------------------------------------------------------------
+# SAP stock reconciliation
+#
+# SAP and the godown disagree for reasons that are entirely legitimate, and
+# the disagreement is predictable:
+#
+#   * ADVANCE — billed to the dealer, not yet dispatched. SAP dropped the
+#     stock when the invoice was raised, but the bags are still in the
+#     godown. Physical is HIGHER than SAP, so advance is ADDED to SAP.
+#   * HOLD — dispatched, not yet billed. The bags have left the godown but
+#     SAP still counts them. Physical is LOWER, so hold is SUBTRACTED.
+#   * SHORTAGE — material short at a godown handover. SAP carries stock that
+#     does not physically exist and never will, so it is SUBTRACTED too.
+#
+#       SAP stock + advance - hold - shortage  ==  physical stock
+#
+# Anything left over in `difference` is a real problem: a missed dispatch
+# entry, a billing row not imported, or a genuine stock loss.
+# ---------------------------------------------------------------------------
+def latest_sap_stock(db: Session, godown_id: int, product_id: int):
+    """The most recent SAP statement figure for this product at this godown."""
+    return (
+        db.query(models.SapStockSnapshot)
+        .filter(models.SapStockSnapshot.godown_id == godown_id,
+                models.SapStockSnapshot.product_id == product_id)
+        .order_by(models.SapStockSnapshot.as_of_date.desc(), models.SapStockSnapshot.id.desc())
+        .first()
+    )
+
+
+def sap_adjustment_bags(db: Session, godown_id: int, product_id: int) -> float:
+    """Total recorded shortage for this product at this godown, in bags."""
+    return float(db.query(func.coalesce(func.sum(models.SapStockAdjustment.bags), 0.0)).filter(
+        models.SapStockAdjustment.godown_id == godown_id,
+        models.SapStockAdjustment.product_id == product_id,
+    ).scalar() or 0.0)
+
+
+def get_stock_reconciliation(db: Session, godown_id: int):
+    """One row per active product: SAP vs physical, with the adjustments that
+    explain the gap. `sap_bags` is None where no statement has been uploaded
+    yet, and the row then carries no expectation or difference rather than
+    pretending SAP holds zero."""
+    rows = []
+    for s in get_current_stock(db, godown_id):
+        product = s["product"]
+
+        # Reuse the dealer report's own logic rather than re-deriving it, so
+        # the two screens can never disagree about what is on advance or hold.
+        positions = get_dealer_advance_hold(db, product_id=product.id, godown_id=godown_id)
+        advance_bags = sum(r["balance_bags"] for r in positions if r["balance_bags"] > 0)
+        hold_bags = sum(-r["balance_bags"] for r in positions if r["balance_bags"] < 0)
+
+        snapshot = latest_sap_stock(db, godown_id, product.id)
+        shortage_bags = sap_adjustment_bags(db, godown_id, product.id)
+
+        sap_bags = snapshot.bags if snapshot else None
+        if sap_bags is None:
+            expected_bags = None
+            difference_bags = None
+        else:
+            expected_bags = sap_bags + advance_bags - hold_bags - shortage_bags
+            difference_bags = s["current_bags"] - expected_bags
+
+        rows.append({
+            "product": product,
+            "sap_bags": sap_bags,
+            "sap_as_of": snapshot.as_of_date if snapshot else None,
+            "sap_source": snapshot.source if snapshot else None,
+            "advance_bags": advance_bags,
+            "hold_bags": hold_bags,
+            "shortage_bags": shortage_bags,
+            "expected_bags": expected_bags,
+            "physical_bags": s["current_bags"],
+            "difference_bags": difference_bags,
+            # A fraction of a bag is rounding noise from an MT-denominated
+            # statement, not a discrepancy worth flagging to anyone.
+            "matched": difference_bags is not None and abs(difference_bags) < 0.5,
+            "bag_weight_kg": s["bag_weight_kg"],
+        })
+    return rows
+
+
+def upsert_sap_stock(db: Session, godown_id: int, product_id: int, as_of_date, bags: float,
+                     source: str = "manual", filename: str = None, user_id: int = None):
+    """Record (or replace) the SAP figure for one product on one date."""
+    row = db.query(models.SapStockSnapshot).filter(
+        models.SapStockSnapshot.godown_id == godown_id,
+        models.SapStockSnapshot.product_id == product_id,
+        models.SapStockSnapshot.as_of_date == as_of_date,
+    ).first()
+    if row:
+        row.bags = bags
+        row.source = source
+        row.filename = filename
+        row.created_by = user_id
+        row.created_at = dt.datetime.utcnow()
+    else:
+        row = models.SapStockSnapshot(
+            godown_id=godown_id, product_id=product_id, as_of_date=as_of_date,
+            bags=bags, source=source, filename=filename, created_by=user_id,
+        )
+        db.add(row)
+    db.commit()
+    return row
+
+
+def list_sap_stock(db: Session, godown_id: int, limit: int = 100):
+    return (
+        db.query(models.SapStockSnapshot)
+        .filter(models.SapStockSnapshot.godown_id == godown_id)
+        .order_by(models.SapStockSnapshot.as_of_date.desc(), models.SapStockSnapshot.id.desc())
+        .limit(limit).all()
+    )
+
+
+def list_sap_adjustments(db: Session, godown_id: int = None):
+    q = db.query(models.SapStockAdjustment)
+    if godown_id:
+        q = q.filter(models.SapStockAdjustment.godown_id == godown_id)
+    return q.order_by(models.SapStockAdjustment.godown_id, models.SapStockAdjustment.product_id,
+                      models.SapStockAdjustment.id).all()
+
+
+def add_sap_adjustment(db: Session, godown_id: int, product_id: int, bags: float,
+                       as_of_date=None, reason: str = None, user_id: int = None):
+    row = models.SapStockAdjustment(
+        godown_id=godown_id, product_id=product_id, bags=bags,
+        as_of_date=as_of_date, reason=reason, created_by=user_id,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def delete_sap_adjustment(db: Session, adjustment_id: int) -> bool:
+    row = db.query(models.SapStockAdjustment).get(adjustment_id)
+    if not row:
+        return False
+    db.delete(row)
+    db.commit()
+    return True

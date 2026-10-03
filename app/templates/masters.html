@@ -170,6 +170,56 @@
     </div>
 
     <div class="card p-3 mb-4">
+      <h5>SAP Stock Adjustment <span class="text-muted small">— permanent SAP vs physical gaps</span></h5>
+      <p class="small text-muted">
+        For a discrepancy that no entry will ever close — material short at a godown handover, say.
+        SAP keeps carrying stock that physically isn't there, so the shortage is <strong>subtracted
+        from the SAP side</strong> every time the Stock page reconciles. Enter bags as a positive
+        number when SAP over-states; a negative number if SAP under-states. Each handover gets its
+        own row, and they are summed per product.
+      </p>
+      {% if sap_adjustments %}
+      <table class="table table-sm table-hover">
+        <thead><tr><th>Godown</th><th>Product</th><th class="num">Shortage (Bags)</th><th>Date</th><th>Reason</th><th></th></tr></thead>
+        <tbody>
+        {% for a in sap_adjustments %}
+          <tr>
+            <td>{{ a.godown.name if a.godown else "-" }}</td>
+            <td>{{ a.product.name if a.product else "-" }}</td>
+            <td class="num fw-bold {{ 'text-danger' if a.bags > 0 else 'text-primary' }}">{{ "%+.0f"|format(a.bags) }}</td>
+            <td class="doc">{{ a.as_of_date or "-" }}</td>
+            <td class="small">{{ a.reason or "-" }}</td>
+            <td>
+              <form method="post" action="/sap-adjustment/{{ a.id }}/delete" class="d-inline">
+                <button class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="small text-muted"><em>No adjustments recorded. The Stock page reconciles with a shortage of zero.</em></p>
+      {% endif %}
+      <form method="post" action="/sap-adjustment/add" class="row g-2">
+        <div class="col-md-3">
+          <select class="form-select" name="godown_id" required>
+            {% for g in godowns %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" name="product_id" required>
+            {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2"><input class="form-control" type="number" step="1" name="bags" placeholder="Shortage (Bags)" required></div>
+        <div class="col-md-2"><input class="form-control" type="date" name="as_of_date"></div>
+        <div class="col-md-2"><input class="form-control" name="reason" placeholder="Reason"></div>
+        <div class="col-md-3 ms-auto"><button class="btn btn-primary w-100">Add adjustment</button></div>
+      </form>
+    </div>
+
+    <div class="card p-3 mb-4">
       <h5>Users</h5>
       <table class="table table-sm">
         <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
