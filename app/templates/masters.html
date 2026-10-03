@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Masters{% endblock %}
 {% block content %}
-<h3 class="mb-1">Masters &amp; Settings <span class="badge bg-danger">Admin only</span></h3>
-<p class="text-muted mb-4">Active godown (for entry pages): <strong>{{ active_godown.name if active_godown else "—" }}</strong>. Freight rates are managed per godown in their own section below — pick the godown there, no need to switch the navbar.</p>
+{% from "macros.html" import report_head, scope_label %}
+{{ report_head("Masters & Settings",
+    subtitle="Godowns, products, dealers, transporters, freight rates, SAP adjustments and users.",
+    scope=scope_label(active_godown),
+    note="Admin only. The godown shown above is the one entry pages write to. Freight rates and SAP stock adjustments have their own godown pickers below, so there is no need to switch the navbar to edit another location's.") }}
 
 <div class="card p-3 mb-4">
   <h5>Godowns</h5>
@@ -186,7 +189,7 @@
           <tr>
             <td>{{ a.godown.name if a.godown else "-" }}</td>
             <td>{{ a.product.name if a.product else "-" }}</td>
-            <td class="num fw-bold {{ 'text-danger' if a.bags > 0 else 'text-primary' }}">{{ "%+.0f"|format(a.bags) }}</td>
+            <td class="num fw-bold {{ 'text-danger' if a.bags > 0 else 'text-primary' }}">{{ a.bags|signed_bags }}</td>
             <td class="doc">{{ a.as_of_date or "-" }}</td>
             <td class="small">{{ a.reason or "-" }}</td>
             <td>

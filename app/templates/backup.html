@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Backup{% endblock %}
 {% block content %}
-<h3 class="mb-4">Backup &amp; Export <span class="badge bg-danger">Admin only</span></h3>
+{% from "macros.html" import report_head, scope_label %}
+{{ report_head("Backup & Export",
+    subtitle="A full copy of the database, and per-table CSVs.",
+    note="Admin only. Download a copy regularly and keep it off this machine — nothing else protects you from a bad import or a wrong delete.") }}
 
 <div class="card p-3 mb-4">
   <h5>What's in the database right now</h5>

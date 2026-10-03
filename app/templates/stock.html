@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Stock{% endblock %}
 {% block content %}
-<h3 class="mb-1">Godown Stock</h3>
-<p class="text-muted mb-4">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+{% from "macros.html" import report_head, scope_label, period_label %}
+{{ report_head("Godown Stock & SAP Reconciliation",
+    subtitle="Computed physical stock, and how it compares with SAP.",
+    scope=scope_label(active_godown)) }}
 
 <div class="card p-3 mb-4">
   <h5>Set / Update Opening Stock</h5>
@@ -48,22 +50,22 @@
         {% if r.sap_bags is none %}
           <td class="num text-muted">&mdash;</td>
           <td class="doc text-muted">no statement</td>
-          <td class="num">{{ "%.0f"|format(r.advance_bags) }}</td>
-          <td class="num">{{ "%.0f"|format(r.hold_bags) }}</td>
-          <td class="num">{{ "%.0f"|format(r.shortage_bags) }}</td>
+          <td class="num">{{ r.advance_bags|bags }}</td>
+          <td class="num">{{ r.hold_bags|bags }}</td>
+          <td class="num">{{ r.shortage_bags|bags }}</td>
           <td class="num text-muted">&mdash;</td>
-          <td class="num fw-bold">{{ "%.0f"|format(r.physical_bags) }}</td>
+          <td class="num fw-bold">{{ r.physical_bags|bags }}</td>
           <td class="num text-muted">&mdash;</td>
           <td><span class="badge bg-secondary">Not uploaded</span></td>
         {% else %}
-          <td class="num">{{ "%.0f"|format(r.sap_bags) }}</td>
+          <td class="num">{{ r.sap_bags|bags }}</td>
           <td class="doc">{{ r.sap_as_of }}{% if r.sap_source == "manual" %} <span class="text-muted">(manual)</span>{% endif %}</td>
-          <td class="num text-primary">{{ "%.0f"|format(r.advance_bags) }}</td>
-          <td class="num text-danger">{{ "%.0f"|format(r.hold_bags) }}</td>
-          <td class="num">{{ "%.0f"|format(r.shortage_bags) }}</td>
-          <td class="num">{{ "%.0f"|format(r.expected_bags) }}</td>
-          <td class="num fw-bold">{{ "%.0f"|format(r.physical_bags) }}</td>
-          <td class="num fw-bold {{ '' if r.matched else 'text-danger' }}">{{ "%+.0f"|format(r.difference_bags) }}</td>
+          <td class="num text-primary">{{ r.advance_bags|bags }}</td>
+          <td class="num text-danger">{{ r.hold_bags|bags }}</td>
+          <td class="num">{{ r.shortage_bags|bags }}</td>
+          <td class="num">{{ r.expected_bags|bags }}</td>
+          <td class="num fw-bold">{{ r.physical_bags|bags }}</td>
+          <td class="num fw-bold {{ '' if r.matched else 'text-danger' }}">{{ r.difference_bags|signed_bags }}</td>
           <td>{% if r.matched %}<span class="badge bg-success">Matched</span>
               {% else %}<span class="badge bg-danger">Check</span>{% endif %}</td>
         {% endif %}
@@ -72,6 +74,22 @@
       <tr><td colspan="10" class="text-center text-muted">No products yet.</td></tr>
     {% endfor %}
     </tbody>
+    {% if reconciliation %}
+    {% set up = reconciliation|rejectattr("sap_bags", "none")|list %}
+    <tfoot><tr>
+      <td><span class="tf-label">Total</span>
+        <span class="tf-count">{{ up|length }} of {{ reconciliation|length }} uploaded</span></td>
+      <td class="num">{{ up|sum(attribute="sap_bags")|bags if up else "—" }}</td>
+      <td></td>
+      <td class="num">{{ reconciliation|sum(attribute="advance_bags")|bags }}</td>
+      <td class="num">{{ reconciliation|sum(attribute="hold_bags")|bags }}</td>
+      <td class="num">{{ reconciliation|sum(attribute="shortage_bags")|bags }}</td>
+      <td class="num">{{ up|sum(attribute="expected_bags")|bags if up else "—" }}</td>
+      <td class="num">{{ reconciliation|sum(attribute="physical_bags")|bags }}</td>
+      <td class="num">{{ up|sum(attribute="difference_bags")|signed_bags if up else "—" }}</td>
+      <td class="tf-count">{% set bad = up|rejectattr("matched")|list %}{{ (bad|length ~ " to check") if bad else ("all matched" if up else "") }}</td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>
@@ -96,7 +114,7 @@
     <tbody>
     {% for u in sap_uploads %}
       <tr><td class="doc">{{ u.as_of_date }}</td><td>{{ u.product.name }}</td>
-          <td class="num">{{ "%.0f"|format(u.bags) }}</td><td class="text-muted">{{ u.source }}</td>
+          <td class="num">{{ u.bags|bags }}</td><td class="text-muted">{{ u.source }}</td>
           <td class="doc text-muted">{{ u.filename or "-" }}</td></tr>
     {% endfor %}
     </tbody>
@@ -115,12 +133,12 @@
       <tr>
         <td>{{ s.product.name }}</td>
         <td class="num text-muted">{{ s.bag_weight_kg }} kg</td>
-        <td class="num">{{ "%.0f"|format(s.opening_bags) }}</td>
+        <td class="num">{{ s.opening_bags|bags }}</td>
         <td class="doc">{{ s.as_of_date }}</td>
-        <td class="num">{{ "%.0f"|format(s.received_bags) }}</td>
-        <td class="num">{{ "%.0f"|format(s.dispatched_bags) }}</td>
-        <td class="num fw-bold">{{ "%.0f"|format(s.current_bags) }}</td>
-        <td class="num">{{ "%.2f"|format(s.current_mt) }}</td>
+        <td class="num">{{ s.received_bags|bags }}</td>
+        <td class="num">{{ s.dispatched_bags|bags }}</td>
+        <td class="num fw-bold">{{ s.current_bags|bags }}</td>
+        <td class="num">{{ s.current_mt|mt }}</td>
       </tr>
     {% endfor %}
     </tbody>

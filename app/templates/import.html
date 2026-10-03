@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Import from SAP{% endblock %}
 {% block content %}
-<h3 class="mb-1">Import from SAP</h3>
-<p class="text-muted mb-2">Imports go into: <strong>{{ active_godown.name if active_godown else "—" }}</strong> — switch godowns from the navbar first if this file is for the other location.</p>
+{% from "macros.html" import report_head, scope_label %}
+{{ report_head("Import from SAP",
+    subtitle="Sale and Material In exports, and the actual-stock report.",
+    scope=scope_label(active_godown),
+    note="Sale and Material In go into the godown selected in the navbar. The stock report has its own godown picker below, because that file does not say which godown it belongs to.") }}
 <p class="text-muted">Download the <strong>Sale</strong> and <strong>Material In</strong> reports from SAP and upload them here. Already-imported rows (matched by Invoice No. / Material Document) are skipped automatically, so it's safe to re-upload a file that overlaps with a previous one — nothing gets duplicated.</p>
 
 {% if unmapped %}

@@ -1,28 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<h3 class="mb-1">Dashboard</h3>
-<p class="text-muted mb-4">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+{% from "macros.html" import report_head, scope_label, period_label %}
+{{ report_head("Operations Summary",
+    scope=scope_label(active_godown)) }}
 
 <div class="row g-3 mb-4">
   <div class="col-md-3">
     <div class="card p-3 stat">
       <div class="stat-label">Total Stock</div>
-      <div class="stat-value">{{ "%.2f"|format(stock|sum(attribute="current_mt")) }}<span class="unit">MT</span></div>
+      <div class="stat-value">{{ stock|sum(attribute="current_mt")|mt }}<span class="unit">MT</span></div>
       <div class="stat-note">Across all products at this godown</div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card p-3 stat">
       <div class="stat-label">Advance Owed to Dealers</div>
-      <div class="stat-value accent">{{ "%.0f"|format(total_advance) }}<span class="unit">bags</span></div>
+      <div class="stat-value accent">{{ total_advance|bags }}<span class="unit">bags</span></div>
       <div class="stat-note">Billed ahead of dispatch</div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card p-3 stat stat-bad">
       <div class="stat-label">Material on Hold</div>
-      <div class="stat-value neg">{{ "%.0f"|format(total_hold) }}<span class="unit">bags</span></div>
+      <div class="stat-value neg">{{ total_hold|bags }}<span class="unit">bags</span></div>
       <div class="stat-note">Dispatched ahead of billing</div>
     </div>
   </div>
@@ -48,15 +49,25 @@
       <tr>
         <td>{{ r.dealer.name if r.dealer else "-" }}</td>
         <td>{{ r.product.name if r.product else "-" }}</td>
-        <td class="num">{{ "%.0f"|format(r.billed_bags) }}</td>
-        <td class="num">{{ "%.0f"|format(r.dispatched_bags) }}</td>
-        <td class="num fw-bold {{ 'text-danger' if r.balance_bags < 0 else 'text-primary' }}">{{ "%.0f"|format(r.balance_bags) }}</td>
+        <td class="num">{{ r.billed_bags|bags }}</td>
+        <td class="num">{{ r.dispatched_bags|bags }}</td>
+        <td class="num fw-bold {{ 'text-danger' if r.balance_bags < 0 else 'text-primary' }}">{{ r.balance_bags|signed_bags }}</td>
         <td>{% if r.status == "Advance" %}<span class="badge badge-advance">Advance</span>{% else %}<span class="badge badge-hold">Hold</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="6" class="text-center text-muted">All dealers settled — no open advance or hold.</td></tr>
     {% endfor %}
     </tbody>
+    {% if open_positions %}
+    <tfoot><tr>
+      <td colspan="2"><span class="tf-label">Total</span>
+        <span class="tf-count">{{ open_positions|length }} open position{{ "" if open_positions|length == 1 else "s" }}</span></td>
+      <td class="num">{{ open_positions|sum(attribute="billed_bags")|bags }}</td>
+      <td class="num">{{ open_positions|sum(attribute="dispatched_bags")|bags }}</td>
+      <td class="num">{{ open_positions|sum(attribute="balance_bags")|signed_bags }}</td>
+      <td class="tf-count">net</td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>
@@ -70,14 +81,25 @@
       {% for s in stock %}
       <tr>
         <td>{{ s.product.name }}</td>
-        <td class="num">{{ "%.0f"|format(s.opening_bags) }}</td>
-        <td class="num">{{ "%.0f"|format(s.received_bags) }}</td>
-        <td class="num">{{ "%.0f"|format(s.dispatched_bags) }}</td>
-        <td class="num fw-bold">{{ "%.0f"|format(s.current_bags) }}</td>
-        <td class="num">{{ "%.2f"|format(s.current_mt) }}</td>
+        <td class="num">{{ s.opening_bags|bags }}</td>
+        <td class="num">{{ s.received_bags|bags }}</td>
+        <td class="num">{{ s.dispatched_bags|bags }}</td>
+        <td class="num fw-bold">{{ s.current_bags|bags }}</td>
+        <td class="num">{{ s.current_mt|mt }}</td>
       </tr>
       {% endfor %}
     </tbody>
+    {% if stock %}
+    <tfoot><tr>
+      <td><span class="tf-label">Total</span>
+        <span class="tf-count">{{ stock|length }} product{{ "" if stock|length == 1 else "s" }}</span></td>
+      <td class="num">{{ stock|sum(attribute="opening_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="received_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="dispatched_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="current_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="current_mt")|mt }}</td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>
@@ -91,7 +113,7 @@
         <thead><tr><th>Date</th><th>Dealer</th><th>Product</th><th class="num">Bags</th></tr></thead>
         <tbody>
         {% for d in recent_dispatch %}
-          <tr><td class="doc">{{ d.date }}</td><td>{{ d.dealer.name }}</td><td>{{ d.product.name }}</td><td class="num">{{ d.bags|int }}</td></tr>
+          <tr><td class="doc">{{ d.date }}</td><td>{{ d.dealer.name }}</td><td>{{ d.product.name }}</td><td class="num">{{ d.bags|bags }}</td></tr>
         {% else %}
           <tr><td colspan="4" class="text-center text-muted">No dispatches yet.</td></tr>
         {% endfor %}
@@ -108,7 +130,7 @@
         <thead><tr><th>Date</th><th>Vehicle</th><th>Product</th><th class="num">Bags Recd.</th></tr></thead>
         <tbody>
         {% for g in recent_grn %}
-          <tr><td class="doc">{{ g.date }}</td><td class="doc">{{ g.vehicle_no or "-" }}</td><td>{{ g.product.name }}</td><td class="num">{{ g.bags_received|int }}</td></tr>
+          <tr><td class="doc">{{ g.date }}</td><td class="doc">{{ g.vehicle_no or "-" }}</td><td>{{ g.product.name }}</td><td class="num">{{ g.bags_received|bags }}</td></tr>
         {% else %}
           <tr><td colspan="4" class="text-center text-muted">No GRNs yet — import a Material In export from SAP.</td></tr>
         {% endfor %}

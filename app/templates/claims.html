@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Claims & Commission{% endblock %}
 {% block content %}
-<h3 class="mb-1">Claims &amp; Commission — from JSW <span class="badge bg-danger">Admin only</span></h3>
-<p class="text-muted mb-2">Showing: <strong>{{ "All Godowns" if showing_all_godowns else (active_godown.name if active_godown else "—") }}</strong></p>
-<p class="text-muted">This page is only visible to admin users. It shows what to claim from JSW (handling commission + secondary freight) — note the freight rate claimed from the company is intentionally different from the rate you actually pay the transporter, shown on the Freight page.</p>
+{% from "macros.html" import report_head, scope_label, period_label %}
+{{ report_head("Claims & Commission from JSW",
+    subtitle="Handling commission plus secondary freight claimable from the company.",
+    scope=scope_label(active_godown, showing_all_godowns),
+    period=(report.month or "All-time"),
+    note="Admin only. The freight rate claimed from JSW is deliberately not the rate paid to the transporter — the difference is your freight margin, shown below.") }}
 
 <div class="card p-3 mb-4 filter-card">
   <form method="get" action="/claims" class="row g-2 align-items-center">
@@ -25,7 +28,7 @@
     <div class="card p-3 stat">
       <div class="stat-label">Commission Claimable</div>
       <div class="stat-value"><span class="unit me-1">₹</span>{{ report.commission_amount|inr }}</div>
-      <div class="stat-note">{{ "%.0f"|format(report.total_bags_dispatched) }} bags &times; ₹{{ report.commission_rate_per_bag }}/bag</div>
+      <div class="stat-note">{{ report.total_bags_dispatched|bags }} bags &times; ₹{{ report.commission_rate_per_bag }}/bag</div>
     </div>
   </div>
   <div class="col-md-4">

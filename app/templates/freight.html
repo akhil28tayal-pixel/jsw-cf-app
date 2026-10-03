@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Freight{% endblock %}
 {% block content %}
-<h3 class="mb-1">Freight Payable — Truck-wise &amp; Transporter-wise</h3>
-<p class="text-muted mb-2">Showing: <strong>{{ "All Godowns" if showing_all_godowns else (active_godown.name if active_godown else "—") }}</strong></p>
-<p class="text-muted">Rated automatically from the Freight Rate Card by pincode (preferred) or district. Trucks marked "rate not set" need a rate card entry — ask an admin to add one under Masters.</p>
+{% from "macros.html" import report_head, scope_label, period_label %}
+{{ report_head("Freight Payable",
+    subtitle="Truck-wise and transporter-wise, rated from the dispatching godown's rate card.",
+    scope=scope_label(active_godown, showing_all_godowns),
+    period=period_label(date_from, date_to),
+    note="Rates are matched by pincode first, then district. A truck marked \"rate not set\" has no rate card entry — an admin can add one under Masters. These are amounts payable to transporters, not the rate claimed from JSW.") }}
 
 <div class="card p-3 mb-4 filter-card">
 <form method="get" action="/freight" class="row g-2 align-items-center">
@@ -25,14 +28,25 @@
     <tbody>
     {% for vehicle, a in truck_report.items() %}
       <tr>
-        <td class="doc">{{ vehicle }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ "%.0f"|format(a.bags) }}</td>
-        <td class="num">{{ "%.2f"|format(a.weight_mt) }}</td><td class="num fw-bold">{{ a.freight_payable|inr }}</td>
+        <td class="doc">{{ vehicle }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
+        <td class="num">{{ a.weight_mt|mt }}</td><td class="num fw-bold">₹{{ a.freight_payable|inr }}</td>
         <td>{% if a.missing_rate %}<span class="badge bg-warning text-dark">{{ a.missing_rate }} trip(s)</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="6" class="text-center text-muted">No dispatch data yet.</td></tr>
     {% endfor %}
     </tbody>
+    {% if truck_report %}
+    {% set rs = truck_report.values()|list %}
+    <tfoot><tr>
+      <td><span class="tf-label">Total</span> <span class="tf-count">{{ rs|length }} vehicle{{ "" if rs|length == 1 else "s" }}</span></td>
+      <td class="num">{{ rs|sum(attribute="trips") }}</td>
+      <td class="num">{{ rs|sum(attribute="bags")|bags }}</td>
+      <td class="num">{{ rs|sum(attribute="weight_mt")|mt }}</td>
+      <td class="num">₹{{ rs|sum(attribute="freight_payable")|inr }}</td>
+      <td class="tf-count">{% set miss = rs|sum(attribute="missing_rate") %}{{ (miss ~ " unrated") if miss else "" }}</td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>
@@ -45,14 +59,25 @@
     <tbody>
     {% for t, a in transporter_report.items() %}
       <tr>
-        <td>{{ t }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ "%.0f"|format(a.bags) }}</td>
-        <td class="num">{{ "%.2f"|format(a.weight_mt) }}</td><td class="num fw-bold">{{ a.freight_payable|inr }}</td>
+        <td>{{ t }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
+        <td class="num">{{ a.weight_mt|mt }}</td><td class="num fw-bold">₹{{ a.freight_payable|inr }}</td>
         <td>{% if a.missing_rate %}<span class="badge bg-warning text-dark">{{ a.missing_rate }} trip(s)</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="6" class="text-center text-muted">No dispatch data yet.</td></tr>
     {% endfor %}
     </tbody>
+    {% if transporter_report %}
+    {% set rs = transporter_report.values()|list %}
+    <tfoot><tr>
+      <td><span class="tf-label">Total</span> <span class="tf-count">{{ rs|length }} transporter{{ "" if rs|length == 1 else "s" }}</span></td>
+      <td class="num">{{ rs|sum(attribute="trips") }}</td>
+      <td class="num">{{ rs|sum(attribute="bags")|bags }}</td>
+      <td class="num">{{ rs|sum(attribute="weight_mt")|mt }}</td>
+      <td class="num">₹{{ rs|sum(attribute="freight_payable")|inr }}</td>
+      <td class="tf-count">{% set miss = rs|sum(attribute="missing_rate") %}{{ (miss ~ " unrated") if miss else "" }}</td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>

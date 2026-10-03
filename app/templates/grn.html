@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}GRN / Inward{% endblock %}
 {% block content %}
-<h3 class="mb-1">Inward — GRN</h3>
-<p class="text-muted mb-3">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+{% from "macros.html" import report_head, scope_label, period_label %}
+{{ report_head("Inward — GRN Register",
+    subtitle="Cement received at the godown, as recorded in SAP.",
+    scope=scope_label(active_godown),
+    period=period_label(date_from, date_to)) }}
 
 <div class="alert alert-info d-flex justify-content-between align-items-center">
   <div>
@@ -46,14 +49,23 @@
       <tr>
         <td class="doc">{{ g.date }}</td><td class="doc">{{ g.sap_grn_no or "-" }}</td><td class="doc">{{ g.invoice_no or "-" }}</td>
         <td class="doc">{{ g.vehicle_no or "-" }}</td><td>{{ g.product.name }}</td>
-        <td class="num">{{ g.bags_invoice|int }}</td><td class="num fw-bold">{{ g.bags_received|int }}</td>
-        <td class="num {{ 'text-danger' if g.shortage_excess < 0 else 'text-success' if g.shortage_excess > 0 else '' }}">{{ g.shortage_excess|int }}</td>
+        <td class="num">{{ g.bags_invoice|bags }}</td><td class="num fw-bold">{{ g.bags_received|bags }}</td>
+        <td class="num {{ 'text-danger' if g.shortage_excess < 0 else 'text-success' if g.shortage_excess > 0 else '' }}">{{ g.shortage_excess|signed_bags }}</td>
         <td>{{ g.source_plant or "-" }}</td><td>{{ g.remarks or "" }}</td>
       </tr>
     {% else %}
       <tr><td colspan="10" class="text-center text-muted">Nothing here yet — import a Material In export from SAP.</td></tr>
     {% endfor %}
     </tbody>
+    {% if entries %}
+    <tfoot><tr>
+      <td colspan="5"><span class="tf-label">Total</span> <span class="tf-count">{{ entries|length }} receipt{{ "" if entries|length == 1 else "s" }}</span></td>
+      <td class="num">{{ entries|sum(attribute="bags_invoice")|bags }}</td>
+      <td class="num">{{ entries|sum(attribute="bags_received")|bags }}</td>
+      <td class="num">{{ entries|sum(attribute="shortage_excess")|signed_bags }}</td>
+      <td colspan="2"></td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>

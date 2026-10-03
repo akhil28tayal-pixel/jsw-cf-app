@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Dispatch{% endblock %}
 {% block content %}
-<h3 class="mb-1">Dispatch — Secondary Transportation</h3>
-<p class="text-muted mb-4">Showing: <strong>{{ active_godown.name if active_godown else "—" }}</strong> (switch godowns from the navbar)</p>
+{% from "macros.html" import report_head, scope_label, period_label %}
+{{ report_head("Dispatch Register",
+    subtitle="Material loaded out of the godown — secondary transportation.",
+    scope=scope_label(active_godown),
+    period=period_label(date_from, date_to)) }}
 
 <div class="card p-3 mb-4">
   <h5>New Dispatch</h5>
@@ -89,11 +92,11 @@
     {% for d in entries %}
       <tr>
         <td class="doc">{{ d.date }}</td><td class="doc">{{ d.dc_no or "-" }}</td><td>{{ d.dealer.name }}</td><td>{{ d.product.name }}</td>
-        <td class="num fw-bold">{{ d.bags|int }}</td><td>{{ d.destination or "-" }}</td><td>{{ d.district or "-" }}</td>
+        <td class="num fw-bold">{{ d.bags|bags }}</td><td>{{ d.destination or "-" }}</td><td>{{ d.district or "-" }}</td>
         <td class="doc">{{ d.vehicle_no or "-" }}</td><td>{{ d.transporter.name if d.transporter else "-" }}</td>
         <td><a href="/dispatch/{{ d.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
           <form method="post" action="/dispatch/{{ d.id }}/delete" class="d-inline"
-                onsubmit="return confirm('Delete this dispatch of {{ d.bags|int }} bags to {{ d.dealer.name }} on {{ d.date }}? This cannot be undone.');">
+                onsubmit="return confirm('Delete this dispatch of {{ d.bags|bags }} bags to {{ d.dealer.name }} on {{ d.date }}? This cannot be undone.');">
             <button class="btn btn-sm btn-outline-danger">Delete</button>
           </form>
         </td>
@@ -102,6 +105,13 @@
       <tr><td colspan="10" class="text-center text-muted">No dispatches recorded yet.</td></tr>
     {% endfor %}
     </tbody>
+    {% if entries %}
+    <tfoot><tr>
+      <td colspan="4"><span class="tf-label">Total</span> <span class="tf-count">{{ entries|length }} dispatch{{ "" if entries|length == 1 else "es" }}{{ " shown" if entries|length >= 500 else "" }}</span></td>
+      <td class="num">{{ entries|sum(attribute="bags")|bags }}</td>
+      <td colspan="5"></td>
+    </tr></tfoot>
+    {% endif %}
   </table>
   </div>
 </div>
