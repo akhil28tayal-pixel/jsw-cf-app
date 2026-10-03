@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Backup{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label %}
+{% from "macros.html" import report_head, scope_label with context %}
 {{ report_head("Backup & Export",
     subtitle="A full copy of the database, and per-table CSVs.",
     note="Admin only. Download a copy regularly and keep it off this machine — nothing else protects you from a bad import or a wrong delete.") }}
 
 <div class="card p-3 mb-4">
   <h5>What's in the database right now</h5>
+  <div class="table-responsive">
   <table class="table table-hover">
     <tbody>
     {% for label, count in counts.items() %}
@@ -15,6 +16,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 {% if is_sqlite %}

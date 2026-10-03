@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Dealer Advance/Hold{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label, period_label %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
 {{ report_head("Dealer Advance & Hold",
     subtitle="Per dealer and product: billed bags against dispatched bags.",
     scope=scope_label(active_godown, showing_all_godowns),
@@ -10,19 +10,19 @@
 <div class="card p-3 mb-4 filter-card">
 <form method="get" action="/dealer-report" class="row g-2 align-items-center">
   <div class="col-md-3">
-    <select class="form-select" name="dealer_id">
+    <select class="form-select" name="dealer_id" aria-label="All Dealers">
       <option value="">All Dealers</option>
       {% for d in dealers %}<option value="{{ d.id }}" {{ "selected" if sel_dealer == d.id }}>{{ d.name }}</option>{% endfor %}
     </select>
   </div>
   <div class="col-md-3">
-    <select class="form-select" name="product_id">
+    <select class="form-select" name="product_id" aria-label="All Products">
       <option value="">All Products</option>
       {% for p in products %}<option value="{{ p.id }}" {{ "selected" if sel_product == p.id }}>{{ p.name }}</option>{% endfor %}
     </select>
   </div>
   <div class="col-md-3">
-    <select class="form-select" name="godown_id">
+    <select class="form-select" name="godown_id" aria-label="Godown">
       <option value="">Active Godown ({{ active_godown.name if active_godown else "—" }})</option>
       {% for g in godowns %}<option value="{{ g.id }}" {{ "selected" if sel_godown == g.id }}>{{ g.name }} only</option>{% endfor %}
     </select>
@@ -31,7 +31,7 @@
     <input class="form-check-input me-2" type="checkbox" name="all_godowns" value="1" id="allGodownsCheck" {{ "checked" if showing_all_godowns }}>
     <label class="form-check-label" for="allGodownsCheck">All Godowns</label>
   </div>
-  <div class="col-md-1"><button class="btn btn-outline-primary w-100">Go</button></div>
+  <div class="col-md-1"><button class="btn btn-primary w-100">Go</button></div>
   <div class="col-md-2"><button class="btn btn-outline-success w-100" formaction="/dealer-report/export">Excel</button></div>
 </form>
 </div>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Claims & Commission{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label, period_label %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
 {{ report_head("Claims & Commission from JSW",
     subtitle="Handling commission plus secondary freight claimable from the company.",
     scope=scope_label(active_godown, showing_all_godowns),
@@ -11,7 +11,7 @@
 <div class="card p-3 mb-4 filter-card">
   <form method="get" action="/claims" class="row g-2 align-items-center">
     <div class="col-md-3">
-      <select class="form-select" name="month" onchange="this.form.submit()">
+      <select class="form-select" name="month" onchange="this.form.submit()" aria-label="All-time">
         <option value="">All-time</option>
         {% for m in months %}<option value="{{ m }}" {{ "selected" if report.month == m }}>{{ m }}</option>{% endfor %}
       </select>

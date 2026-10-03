@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Billing{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label, period_label %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
 {{ report_head("Billing Register",
     subtitle="Invoices raised on dealers, as recorded in SAP.",
     scope=scope_label(active_godown),
@@ -29,21 +29,21 @@
 <div class="card p-3 mb-4 filter-card">
   <h5>Filter</h5>
   <form method="get" action="/billing" class="row g-2">
-    <div class="col-md-2"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From"></div>
-    <div class="col-md-2"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To"></div>
+    <div class="col-md-2"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From" aria-label="From"></div>
+    <div class="col-md-2"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To" aria-label="To"></div>
     <div class="col-md-2">
-      <select class="form-select" name="product_id">
+      <select class="form-select" name="product_id" aria-label="All Products">
         <option value="">All Products</option>
         {% for p in products %}<option value="{{ p.id }}" {{ "selected" if sel_product == p.id }}>{{ p.name }}</option>{% endfor %}
       </select>
     </div>
     <div class="col-md-3">
-      <select class="form-select" name="dealer_id">
+      <select class="form-select" name="dealer_id" aria-label="All Dealers">
         <option value="">All Dealers</option>
         {% for d in dealers %}<option value="{{ d.id }}" {{ "selected" if sel_dealer == d.id }}>{{ d.name }}</option>{% endfor %}
       </select>
     </div>
-    <div class="col-md-2"><input class="form-control" name="search" value="{{ search }}" placeholder="Invoice No."></div>
+    <div class="col-md-2"><input class="form-control" name="search" value="{{ search }}" placeholder="Invoice No." aria-label="Invoice No."></div>
     <div class="col-md-1"><button class="btn btn-outline-primary w-100">Go</button></div>
   </form>
 </div>
@@ -59,12 +59,13 @@
         <td class="doc">{{ b.date }}</td><td class="doc">{{ b.invoice_no or "-" }}</td><td>{{ b.dealer.name }}</td>
         <td>{{ b.product.name }}</td><td class="num">{{ b.bags|bags }}</td><td class="num fw-bold">{{ b.amount|inr }}</td><td>{{ b.remarks or "" }}</td>
         {% if user.role == "admin" %}
-        <td class="text-end">
+        <td class="num"><span class="row-actions">
           <form method="post" action="/billing/{{ b.id }}/delete" class="d-inline"
                 onsubmit="return confirm('Delete invoice {{ b.invoice_no or "(no number)" }} — {{ b.bags|bags }} bags billed to {{ b.dealer.name }} on {{ b.date }}?\n\nThis cannot be undone, but re-importing the Sale export will bring it back.');">
-            <button class="btn btn-sm btn-outline-danger">Delete</button>
+            <button class="btn btn-sm btn-outline-danger"
+                    aria-label="Delete invoice {{ b.invoice_no or b.id }}">Delete</button>
           </form>
-        </td>
+        </span></td>
         {% endif %}
       </tr>
     {% else %}

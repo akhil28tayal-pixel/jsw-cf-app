@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Freight{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label, period_label %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
 {{ report_head("Freight Payable",
     subtitle="Truck-wise and transporter-wise, rated from the dispatching godown's rate card.",
     scope=scope_label(active_godown, showing_all_godowns),
@@ -10,13 +10,13 @@
 
 <div class="card p-3 mb-4 filter-card">
 <form method="get" action="/freight" class="row g-2 align-items-center">
-  <div class="col-md-3"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From"></div>
-  <div class="col-md-3"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To"></div>
+  <div class="col-md-3"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From" aria-label="From"></div>
+  <div class="col-md-3"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To" aria-label="To"></div>
   <div class="col-md-3 form-check d-flex align-items-center">
     <input class="form-check-input me-2" type="checkbox" name="all_godowns" value="1" id="allGodownsCheck" {{ "checked" if showing_all_godowns }}>
     <label class="form-check-label" for="allGodownsCheck">All Godowns</label>
   </div>
-  <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+  <div class="col-md-2"><button class="btn btn-primary w-100">Filter</button></div>
   <div class="col-md-2"><button class="btn btn-outline-success w-100" formaction="/freight/export">Excel</button></div>
 </form>
 </div>

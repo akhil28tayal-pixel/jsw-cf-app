@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Import from SAP{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label %}
+{% from "macros.html" import report_head, scope_label with context %}
 {{ report_head("Import from SAP",
     subtitle="Sale and Material In exports, and the actual-stock report.",
     scope=scope_label(active_godown),
@@ -12,6 +12,7 @@
 <div class="card p-3 mb-4 border-warning">
   <h5 class="text-warning">⚠ SAP Product Codes Needing Mapping</h5>
   <p class="small text-muted">These codes showed up in an import but don't match any product yet. Rows using them were skipped. Map each one to a product (or mark it "ignore" if it's not something you stock, like a raw-material code) — then re-upload the same file to pull those rows in.</p>
+  <div class="table-responsive">
   <table class="table table-sm">
     <thead><tr><th>SAP Code</th><th>Description (from SAP)</th><th>Map to Product</th><th></th></tr></thead>
     <tbody>
@@ -22,7 +23,7 @@
         <td colspan="2">
           <form method="post" action="/import/map-product" class="d-flex gap-2">
             <input type="hidden" name="sap_code" value="{{ u.sap_code }}">
-            <select class="form-select form-select-sm" name="product_id">
+            <select class="form-select form-select-sm" name="product_id" aria-label="ignore this code">
               <option value="">-- ignore this code --</option>
               {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
             </select>
@@ -33,6 +34,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endif %}
 
@@ -75,7 +77,7 @@
   </p>
   <form method="post" action="/import/sap-stock" enctype="multipart/form-data" class="row g-2">
     <div class="col-md-3">
-      <select class="form-select" name="godown_id" required>
+      <select class="form-select" name="godown_id" required aria-label="Godown">
         {% for g in godowns %}<option value="{{ g.id }}" {{ "selected" if active_godown and g.id == active_godown.id }}>{{ g.name }}</option>{% endfor %}
       </select>
     </div>

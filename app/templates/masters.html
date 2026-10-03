@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Masters{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label %}
+{% from "macros.html" import report_head, scope_label with context %}
 {{ report_head("Masters & Settings",
     subtitle="Godowns, products, dealers, transporters, freight rates, SAP adjustments and users.",
     scope=scope_label(active_godown),
@@ -9,6 +9,7 @@
 
 <div class="card p-3 mb-4">
   <h5>Godowns</h5>
+  <div class="table-responsive">
   <table class="table table-sm">
     <thead><tr><th>Name</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -17,7 +18,7 @@
         <td>{{ g.name }}{% if active_godown and active_godown.id == g.id %} <span class="badge bg-primary">Active</span>{% endif %}</td>
         <td>{% if g.active %}<span class="badge bg-success">Enabled</span>{% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}</td>
         <td>
-          <form method="post" action="/godowns/{{ g.id }}/toggle" class="d-inline">
+          <form method="post" action="/godowns/{{ g.id }}/toggle" class="d-inline row-actions">
             <button class="btn btn-sm btn-outline-secondary">{{ "Disable" if g.active else "Enable" }}</button>
           </form>
         </td>
@@ -25,8 +26,9 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   <form method="post" action="/godowns/add" class="d-flex gap-2">
-    <input class="form-control" name="name" placeholder="New godown name (e.g. Sonipat Godown)" required>
+    <input class="form-control" name="name" placeholder="New godown name (e.g. Sonipat Godown)" required aria-label="New godown name (e.g. Sonipat Godown)">
     <button class="btn btn-primary">Add</button>
   </form>
   <p class="small text-muted mt-2 mb-0">Each godown gets its own stock, GRN, dispatch, billing, and freight rate card — all completely independent. Switch the active godown from the navbar dropdown to work in it.</p>
@@ -54,7 +56,7 @@
             <td class="num">{{ (1000 / p.bag_weight_kg)|round|int if p.bag_weight_kg else 20 }} bags</td>
             <td>{% if p.active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}</td>
             <td>
-              <form method="post" action="/products/{{ p.id }}/toggle" class="d-inline">
+              <form method="post" action="/products/{{ p.id }}/toggle" class="d-inline row-actions">
                 <button class="btn btn-sm btn-outline-secondary">{{ "Deactivate" if p.active else "Activate" }}</button>
               </form>
             </td>
@@ -64,8 +66,8 @@
       </table>
       </div>
       <form method="post" action="/products/add" class="row g-2">
-        <div class="col-7"><input class="form-control" name="name" placeholder="New product name (e.g. JSW Premium)" required></div>
-        <div class="col-3"><input class="form-control" type="number" step="0.1" min="0.1" name="bag_weight_kg" placeholder="Bag kg (50)"></div>
+        <div class="col-7"><input class="form-control" name="name" placeholder="New product name (e.g. JSW Premium)" required aria-label="New product name (e.g. JSW Premium)"></div>
+        <div class="col-3"><input class="form-control" type="number" step="0.1" min="0.1" name="bag_weight_kg" placeholder="Bag kg (50)" aria-label="Bag kg (50)"></div>
         <div class="col-2"><button class="btn btn-primary w-100">Add</button></div>
       </form>
       <p class="small text-muted mt-2 mb-0">Bag size drives stock in MT, the MT&rarr;bags conversion on SAP import, and the weight each truck is rated on for freight. Cement is a 50&nbsp;kg bag; <strong>Microfine is 20&nbsp;kg</strong>, so 1&nbsp;MT is 50 bags of it. Leave the new-product field blank for the usual 50&nbsp;kg.</p>
@@ -73,23 +75,27 @@
 
     <div class="card p-3 mb-4">
       <h5>Dealers</h5>
-      <table class="table table-sm"><tbody>
+      <div class="table-responsive">
+  <table class="table table-sm"><tbody>
         {% for d in dealers %}<tr><td>{{ d.name }}</td></tr>{% endfor %}
       </tbody></table>
+  </div>
       <form method="post" action="/dealers/add" class="d-flex gap-2">
-        <input class="form-control" name="name" placeholder="New dealer name" required>
+        <input class="form-control" name="name" placeholder="New dealer name" required aria-label="New dealer name">
         <button class="btn btn-primary">Add</button>
       </form>
     </div>
 
     <div class="card p-3 mb-4">
       <h5>Transporters</h5>
-      <table class="table table-sm"><tbody>
+      <div class="table-responsive">
+  <table class="table table-sm"><tbody>
         {% for t in transporters %}<tr><td>{{ t.name }}</td><td>{{ t.contact or "" }}</td></tr>{% endfor %}
       </tbody></table>
+  </div>
       <form method="post" action="/transporters/add" class="row g-2">
-        <div class="col-6"><input class="form-control" name="name" placeholder="Transporter name" required></div>
-        <div class="col-4"><input class="form-control" name="contact" placeholder="Contact (optional)"></div>
+        <div class="col-6"><input class="form-control" name="name" placeholder="Transporter name" required aria-label="Transporter name"></div>
+        <div class="col-4"><input class="form-control" name="contact" placeholder="Contact (optional)" aria-label="Contact (optional)"></div>
         <div class="col-2"><button class="btn btn-primary w-100">Add</button></div>
       </form>
     </div>
@@ -106,7 +112,7 @@
 
       <form method="get" action="/products" class="d-flex gap-2 align-items-center mb-3">
         <label class="small text-muted mb-0 text-nowrap">Rates for:</label>
-        <select class="form-select form-select-sm" name="rate_godown_id" onchange="this.form.submit()">
+        <select class="form-select form-select-sm" name="rate_godown_id" onchange="this.form.submit()" aria-label="Rate card godown"" if g.active else " (disabled)" }}">
           {% for g in godowns %}
             <option value="{{ g.id }}" {{ "selected" if rate_godown and rate_godown.id == g.id }}>{{ g.name }}{{ "" if g.active else " (disabled)" }}</option>
           {% endfor %}
@@ -156,18 +162,18 @@
 
       <h6 class="mt-2">Add a rate</h6>
       <form method="post" action="/rate-card/add" class="row g-2">
-        <div class="col-md-3">
-          <select class="form-select" name="godown_id" required>
+        <div class="col-12 col-sm-6">
+          <select class="form-select" name="godown_id" required aria-label="Godown">
             {% for g in godowns %}
               <option value="{{ g.id }}" {{ "selected" if (rate_godown and rate_godown.id == g.id) or (not rate_godown and active_godown and active_godown.id == g.id) }}>{{ g.name }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-3"><input class="form-control" name="district" placeholder="District" required></div>
-        <div class="col-md-2"><input class="form-control" name="pincode" placeholder="Pincode (opt.)"></div>
-        <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="transporter_rate_per_mt" placeholder="Pay ₹/MT" required></div>
-        <div class="col-md-2"><input class="form-control" type="number" step="0.01" name="company_claim_rate_per_mt" placeholder="Claim ₹/MT" required></div>
-        <div class="col-md-3 ms-auto"><button class="btn btn-primary w-100">Add rate</button></div>
+        <div class="col-12 col-sm-6"><input class="form-control" name="district" placeholder="District" required aria-label="District"></div>
+        <div class="col-12 col-sm-6"><input class="form-control" name="pincode" placeholder="Pincode (optional)" aria-label="Pincode (optional)"></div>
+        <div class="col-6 col-sm-3"><input class="form-control" type="number" step="0.01" name="transporter_rate_per_mt" placeholder="Pay ₹/MT" required aria-label="Pay ₹ per MT"></div>
+        <div class="col-6 col-sm-3"><input class="form-control" type="number" step="0.01" name="company_claim_rate_per_mt" placeholder="Claim ₹/MT" required aria-label="Claim ₹ per MT"></div>
+        <div class="col-12"><button class="btn btn-primary w-100">Add rate</button></div>
       </form>
       <p class="small text-muted mt-2 mb-0">Leave Pincode blank to set a district-wide default rate. A specific pincode entry always overrides the district default. The Claim rate is what you bill JSW and never appears on the Freight page.</p>
     </div>
@@ -182,7 +188,8 @@
         own row, and they are summed per product.
       </p>
       {% if sap_adjustments %}
-      <table class="table table-sm table-hover">
+      <div class="table-responsive">
+  <table class="table table-sm table-hover">
         <thead><tr><th>Godown</th><th>Product</th><th class="num">Shortage (Bags)</th><th>Date</th><th>Reason</th><th></th></tr></thead>
         <tbody>
         {% for a in sap_adjustments %}
@@ -201,30 +208,32 @@
         {% endfor %}
         </tbody>
       </table>
+  </div>
       {% else %}
       <p class="small text-muted"><em>No adjustments recorded. The Stock page reconciles with a shortage of zero.</em></p>
       {% endif %}
       <form method="post" action="/sap-adjustment/add" class="row g-2">
         <div class="col-md-3">
-          <select class="form-select" name="godown_id" required>
+          <select class="form-select" name="godown_id" required aria-label="Godown">
             {% for g in godowns %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
           </select>
         </div>
         <div class="col-md-3">
-          <select class="form-select" name="product_id" required>
+          <select class="form-select" name="product_id" required aria-label="Product">
             {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-2"><input class="form-control" type="number" step="1" name="bags" placeholder="Shortage (Bags)" required></div>
+        <div class="col-md-2"><input class="form-control" type="number" step="1" name="bags" placeholder="Shortage (Bags)" required aria-label="Shortage (Bags)"></div>
         <div class="col-md-2"><input class="form-control" type="date" name="as_of_date"></div>
-        <div class="col-md-2"><input class="form-control" name="reason" placeholder="Reason"></div>
+        <div class="col-md-2"><input class="form-control" name="reason" placeholder="Reason" aria-label="Reason"></div>
         <div class="col-md-3 ms-auto"><button class="btn btn-primary w-100">Add adjustment</button></div>
       </form>
     </div>
 
     <div class="card p-3 mb-4">
       <h5>Users</h5>
-      <table class="table table-sm">
+      <div class="table-responsive">
+  <table class="table table-sm">
         <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
         <tbody>
         {% for u in users %}
@@ -233,7 +242,7 @@
             <td>{% if u.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}</td>
             <td>
               {% if u.id != user.id %}
-              <form method="post" action="/users/{{ u.id }}/toggle" class="d-inline">
+              <form method="post" action="/users/{{ u.id }}/toggle" class="d-inline row-actions">
                 <button class="btn btn-sm btn-outline-secondary">{{ "Disable" if u.is_active else "Enable" }}</button>
               </form>
               {% endif %}
@@ -242,11 +251,12 @@
         {% endfor %}
         </tbody>
       </table>
+  </div>
       <form method="post" action="/users/add" class="row g-2">
-        <div class="col-4"><input class="form-control" name="username" placeholder="Username" required></div>
-        <div class="col-4"><input class="form-control" type="password" name="password" placeholder="Password" required></div>
+        <div class="col-4"><input class="form-control" name="username" placeholder="Username" required aria-label="Username"></div>
+        <div class="col-4"><input class="form-control" type="password" name="password" placeholder="Password" required aria-label="Password"></div>
         <div class="col-2">
-          <select class="form-select" name="role">
+          <select class="form-select" name="role" aria-label="Staff">
             <option value="staff">Staff</option>
             <option value="admin">Admin</option>
           </select>

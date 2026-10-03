@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Stock{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label, period_label %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
 {{ report_head("Godown Stock & SAP Reconciliation",
     subtitle="Computed physical stock, and how it compares with SAP.",
     scope=scope_label(active_godown)) }}
@@ -11,19 +11,19 @@
   <p class="small text-muted">Set this once per product when you start using the app, or whenever you need to re-baseline after a physical count. Everything from this date onward is added/subtracted automatically from GRN and Dispatch entries.</p>
   <form method="post" action="/stock/opening" class="row g-2">
     <div class="col-md-4">
-      <select class="form-select" name="product_id" required>
+      <select class="form-select" name="product_id" required aria-label="Product">
         {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
       </select>
     </div>
-    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="Opening Stock (Bags)" required></div>
+    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="Opening Stock (Bags)" required aria-label="Opening Stock (Bags)"></div>
     <div class="col-md-3"><input class="form-control" type="date" name="as_of_date" required></div>
     <div class="col-md-2"><button class="btn btn-primary w-100">Save</button></div>
   </form>
 </div>
 
 <div class="card p-3 mb-4">
-  <div class="d-flex justify-content-between align-items-baseline gap-3">
-    <h5 class="mb-0">SAP vs Physical Reconciliation</h5>
+  <div class="card-head">
+    <h5>SAP vs Physical Reconciliation</h5>
     <span class="d-flex align-items-center gap-3">
       <a href="/import" class="small">Upload SAP stock statement &rarr;</a>
       <a href="/stock/export" class="btn btn-sm btn-outline-success">Excel</a>
@@ -102,11 +102,11 @@
   <p class="small text-muted">The PDF upload on the Import page fills these in automatically. Use this when a statement won't parse, or to correct one figure. Re-entering the same product and date replaces the figure rather than adding a second one.</p>
   <form method="post" action="/stock/sap-figure" class="row g-2">
     <div class="col-md-4">
-      <select class="form-select" name="product_id" required>
+      <select class="form-select" name="product_id" required aria-label="Product">
         {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
       </select>
     </div>
-    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="SAP Stock (Bags)" required></div>
+    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="SAP Stock (Bags)" required aria-label="SAP Stock (Bags)"></div>
     <div class="col-md-3"><input class="form-control" type="date" name="as_of_date" required></div>
     <div class="col-md-2"><button class="btn btn-outline-primary w-100">Save</button></div>
   </form>

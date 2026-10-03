@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}GRN / Inward{% endblock %}
 {% block content %}
-{% from "macros.html" import report_head, scope_label, period_label %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
 {{ report_head("Inward — GRN Register",
     subtitle="Cement received at the godown, as recorded in SAP.",
     scope=scope_label(active_godown),
@@ -25,16 +25,16 @@
 <div class="card p-3 mb-4 filter-card">
   <h5>Filter</h5>
   <form method="get" action="/grn" class="row g-2">
-    <div class="col-md-2"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From"></div>
-    <div class="col-md-2"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To"></div>
+    <div class="col-md-2"><input class="form-control" type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From" aria-label="From"></div>
+    <div class="col-md-2"><input class="form-control" type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To" aria-label="To"></div>
     <div class="col-md-2">
-      <select class="form-select" name="product_id">
+      <select class="form-select" name="product_id" aria-label="All Products">
         <option value="">All Products</option>
         {% for p in products %}<option value="{{ p.id }}" {{ "selected" if sel_product == p.id }}>{{ p.name }}</option>{% endfor %}
       </select>
     </div>
-    <div class="col-md-2"><input class="form-control" name="vehicle_no" value="{{ vehicle_no }}" placeholder="Vehicle No."></div>
-    <div class="col-md-2"><input class="form-control" name="search" value="{{ search }}" placeholder="SAP GRN / Invoice No."></div>
+    <div class="col-md-2"><input class="form-control" name="vehicle_no" value="{{ vehicle_no }}" placeholder="Vehicle No." aria-label="Vehicle No."></div>
+    <div class="col-md-2"><input class="form-control" name="search" value="{{ search }}" placeholder="SAP GRN / Invoice No." aria-label="SAP GRN / Invoice No."></div>
     <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
   </form>
 </div>
