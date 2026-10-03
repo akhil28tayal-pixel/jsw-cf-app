@@ -41,13 +41,25 @@ SAP product mappings, and your admin login.
 From this folder on your Mac:
 
 ```bash
-venv/bin/pip install -r requirements.txt      # picks up the new Postgres driver
-venv/bin/python scripts/push_to_postgres.py \
+~/.venvs/jsw_cf/bin/pip install -r requirements.txt   # picks up the Postgres driver
+~/.venvs/jsw_cf/bin/python scripts/push_to_postgres.py \
   --target "PASTE_YOUR_NEON_CONNECTION_STRING_HERE"
 ```
 
 Run it with `--dry-run` first if you want to see what it will copy without
-writing anything.
+writing anything. Note that `--dry-run` only reads the SQLite file — it does
+not connect to the target at all, so it proves nothing about the connection.
+
+**Use the direct endpoint here, not the pooled one.** Neon gives you a host
+with `-pooler` in it; strip that for this script. The pooler runs every
+statement in its own transaction, which breaks the `setval` calls that reset
+the id counters. Render uses the pooled host — that split is deliberate.
+Drop `channel_binding=require` too if libpq rejects it; `sslmode=require`
+is what matters.
+
+This has to run from a machine with normal network access. It talks to
+Postgres on port 5432, which plenty of sandboxes and office networks block
+while still allowing HTTPS.
 
 It builds the tables, copies every row keeping the same ids (so every dispatch
 still points at the right dealer), moves the id counters past what it inserted,
@@ -67,7 +79,7 @@ than silently doubling them.
 ## 3. Put the code on GitHub
 
 ```bash
-cd ~/Desktop/jsw_cf_app
+cd ~/CascadeProjects/jsw_cf_app
 git init
 git add -A
 git commit -m "JSW C&F operations app"
@@ -179,6 +191,11 @@ before — `./run.sh` still behaves identically:
 - `render.yaml` describes the service so Render doesn't have to be configured
   by hand.
 - `scripts/push_to_postgres.py` is new — the copy tool from step 2.
+
+`run.sh` also keeps the virtualenv at `~/.venvs/jsw_cf`, outside the project.
+A venv inside an iCloud-synced folder gets its library files evicted from
+local disk, and Python then hangs mid-import — which is exactly what stopped
+the app booting in late September.
 
 All of it was tested against a real Postgres 16 before you got it: 302 rows
 copied with matching counts on both sides, id sequences verified by inserting a
