@@ -1,19 +1,14 @@
 import datetime as dt
-import io
-import re
 
 from fastapi import APIRouter, Request, Depends, Form, Query
-from fastapi.responses import RedirectResponse, StreamingResponse
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth import require_login
 from app.flash import flash, get_flashed_messages
 from app.godown_context import get_active_godown
-from app import crud, models
+from app import crud, models, reporting
 from app.query_utils import parse_date, parse_int
 
 from app.templating import templates
@@ -187,14 +182,6 @@ EXPORT_COLUMNS = [
     ("Bags", 10), ("MT", 10), ("Remarks", 30),
 ]
 
-HEADER_FILL = PatternFill("solid", fgColor="1F3864")
-HEADER_FONT = Font(bold=True, color="FFFFFF")
-
-
-def _slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "all"
-
-
 @router.get("/dispatch/export")
 def export_dispatch_excel(request: Request, date_from: str = Query(None), date_to: str = Query(None),
                           product_id: str = Query(None), dealer_id: str = Query(None),
@@ -217,61 +204,27 @@ def export_dispatch_excel(request: Request, date_from: str = Query(None), date_t
         product_id, dealer_id, transporter_id, vehicle_no,
     ).order_by(models.Dispatch.date, models.Dispatch.id).all()
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Dispatch"
-    ws.append([label for label, _ in EXPORT_COLUMNS])
-    for idx, (label, width) in enumerate(EXPORT_COLUMNS, start=1):
-        cell = ws.cell(row=1, column=idx)
-        cell.fill = HEADER_FILL
-        cell.font = HEADER_FONT
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        ws.column_dimensions[get_column_letter(idx)].width = width
-
-    total_bags = 0.0
-    total_mt = 0.0
-    for d in rows:
-        # Weight has to use the bag size of the product actually on the truck —
-        # 400 bags of Microfine is 8 MT, not 20 MT.
-        mt = (d.bags or 0) * crud.product_bag_weight_mt(db, d.product)
-        total_bags += d.bags or 0
-        total_mt += mt
-        ws.append([
-            d.date, d.dc_no or "", d.dealer.name if d.dealer else "", d.destination or "",
-            d.district or "", d.pincode or "", d.vehicle_no or "",
-            d.transporter.name if d.transporter else "", d.product.name if d.product else "",
-            d.bags or 0, round(mt, 3), d.remarks or "",
-        ])
-
-    last_row = ws.max_row
-    if rows:
-        total_row = last_row + 1
-        ws.cell(row=total_row, column=1, value="TOTAL").font = Font(bold=True)
-        ws.cell(row=total_row, column=10, value=total_bags).font = Font(bold=True)
-        ws.cell(row=total_row, column=11, value=round(total_mt, 3)).font = Font(bold=True)
-        for col in range(1, len(EXPORT_COLUMNS) + 1):
-            ws.cell(row=total_row, column=col).fill = PatternFill("solid", fgColor="DDEBF7")
-
-    for row in ws.iter_rows(min_row=2, max_row=last_row):
-        row[0].number_format = "dd-mmm-yy"
-        row[9].number_format = "#,##0"
-        row[10].number_format = "#,##0.000"
-    if last_row > 1:
-        ws.auto_filter.ref = f"A1:{get_column_letter(len(EXPORT_COLUMNS))}{last_row}"
-    ws.freeze_panes = "A2"
-
-    parts = ["dispatch", _slug(active_godown.name if active_godown else "")]
-    if date_from or date_to:
-        parts.append(f"{date_from or 'start'}_to_{date_to or 'today'}")
-    else:
-        parts.append(dt.date.today().isoformat())
-    filename = "_".join(parts) + ".xlsx"
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    wb = reporting.write_report(
+        "Dispatch Register",
+        EXPORT_COLUMNS,
+        [[d.date, d.dc_no or "", d.dealer.name if d.dealer else "", d.destination or "",
+          d.district or "", d.pincode or "", d.vehicle_no or "",
+          d.transporter.name if d.transporter else "", d.product.name if d.product else "",
+          d.bags or 0,
+          # Weight uses the bag size of the product actually on the truck -
+          # 400 bags of Microfine is 8 MT, not 20 MT.
+          round((d.bags or 0) * crud.product_bag_weight_mt(db, d.product), 3),
+          d.remarks or ""] for d in rows],
+        sheet_name="Dispatch",
+        scope=active_godown.name if active_godown else "All Godowns",
+        period=reporting.period_text(date_from, date_to),
+        user=user.username,
+        total_columns=(10, 11),
+        number_formats={1: "dd-mmm-yy", 10: "#,##0", 11: "#,##0.000"},
+        note="Every row these filters select, not just the 500 shown on screen.",
     )
+
+    filename = reporting.report_filename(
+        "dispatch", active_godown.name if active_godown else None, date_from, date_to)
+
+    return reporting.xlsx_response(wb, filename)

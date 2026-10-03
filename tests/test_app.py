@@ -437,12 +437,25 @@ def test_billing_delete_button_hidden_from_staff(client):
 # ---------------------------------------------------------------------------
 # Dispatch -> Excel export
 # ---------------------------------------------------------------------------
-def _dispatch_sheet(response):
-    """Read the downloaded workbook back into a list of rows."""
+def _dispatch_sheet(response, sheet="Dispatch"):
+    """Read a downloaded workbook back as (header_row, data_rows, total_row).
+
+    Every export now opens with a title block naming the firm, the report, the
+    godown and the period, so the column headings are NOT on row 1. This finds
+    them by content instead of by position, which also means the tests stop
+    caring if another line is added to that block later.
+    """
     import io as _io
     import openpyxl
     wb = openpyxl.load_workbook(_io.BytesIO(response.content))
-    return list(wb["Dispatch"].iter_rows(values_only=True))
+    rows = list(wb[sheet].iter_rows(values_only=True))
+    header_idx = next(i for i, row in enumerate(rows) if row and row[0] == "Date")
+    header = rows[header_idx]
+    body = rows[header_idx + 1:]
+    total = None
+    if body and body[-1] and str(body[-1][0] or "").startswith("TOTAL"):
+        total, body = body[-1], body[:-1]
+    return header, body, total
 
 
 def _add_dispatch(client, **overrides):
@@ -465,11 +478,12 @@ def test_dispatch_export_returns_an_xlsx_with_totals(client):
     assert "spreadsheetml" in r.headers["content-type"]
     assert ".xlsx" in r.headers["content-disposition"]
 
-    rows = _dispatch_sheet(r)
-    assert rows[0][0] == "Date" and rows[0][9] == "Bags" and rows[0][10] == "MT"
-    assert rows[-1][0] == "TOTAL"
-    assert rows[-1][9] == 500                      # 200 + 300 bags
-    assert rows[-1][10] == 25.0                    # 500 bags x 50 kg = 25 MT
+    header, body, total = _dispatch_sheet(r)
+    assert header[0] == "Date" and header[9] == "Bags" and header[10] == "MT"
+    assert len(body) == 2
+    assert total is not None and total[0].startswith("TOTAL")
+    assert total[9] == 500                         # 200 + 300 bags
+    assert total[10] == 25.0                       # 500 bags x 50 kg = 25 MT
 
 
 def test_dispatch_export_respects_the_filters(client, db_session):
@@ -481,10 +495,9 @@ def test_dispatch_export_respects_the_filters(client, db_session):
     dealer = db_session.query(models.Dealer).filter_by(name="Only Me Dealer").one()
 
     r = client.get("/dispatch/export", params={"dealer_id": dealer.id})
-    rows = _dispatch_sheet(r)
-    dealers_in_file = {row[2] for row in rows[1:-1]}
-    assert dealers_in_file == {"Only Me Dealer"}
-    assert rows[-1][9] == 120
+    header, body, total = _dispatch_sheet(r)
+    assert {row[2] for row in body} == {"Only Me Dealer"}
+    assert total[9] == 120
 
 
 def test_dispatch_export_accepts_blank_filter_fields(client):
@@ -495,6 +508,19 @@ def test_dispatch_export_accepts_blank_filter_fields(client):
                                                "dealer_id": "", "transporter_id": "",
                                                "vehicle_no": ""})
     assert r.status_code == 200
+
+
+def test_export_carries_a_title_block_naming_the_firm_and_scope(client):
+    """A file someone saves or emails has to identify itself."""
+    login(client)
+    _add_dispatch(client, new_dealer="Title Block Dealer", bags=10, date="2026-12-01")
+    r = client.get("/dispatch/export")
+    import io as _io, openpyxl
+    ws = openpyxl.load_workbook(_io.BytesIO(r.content))["Dispatch"]
+    assert "A T TRADING CO" in ws["A1"].value
+    assert "Dispatch Register" in ws["A1"].value
+    assert "Godown:" in ws["A2"].value and "Generated:" in ws["A2"].value
+    assert "IST" in ws["A2"].value
 
 
 def test_dispatch_page_has_the_excel_button(client):
