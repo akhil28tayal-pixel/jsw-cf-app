@@ -70,7 +70,14 @@
     </div>
     <div class="col-md-2"><input class="form-control" name="vehicle_no" value="{{ vehicle_no }}" placeholder="Vehicle No."></div>
     <div class="col-md-2"><button class="btn btn-outline-primary w-100">Filter</button></div>
+    <div class="col-md-2">
+      <button class="btn btn-success w-100" formaction="/dispatch/export"
+              title="Download these filtered rows as an Excel file">&#8681; Excel</button>
+    </div>
   </form>
+  <p class="small text-muted mt-2 mb-0">Set the filters you want, then hit <strong>Excel</strong> —
+    the download contains exactly the rows those filters select (all of them, not just the 500 shown
+    below), with Bags, MT and a totals row.</p>
 </div>
 
 <div class="card p-3">

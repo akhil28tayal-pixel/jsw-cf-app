@@ -388,3 +388,116 @@ def test_delete_dispatch_removes_material_from_advance_hold_report(client, db_se
     db_session.expire_all()
     rows = crud.get_dealer_advance_hold(db_session, dealer_id=dealer.id)
     assert rows == []  # no billing or dispatch left for this dealer at all
+
+
+def test_admin_can_delete_billing_row_and_reimport_it(client, import_billing, db_session):
+    """Deleting frees the Invoice No., so the corrected file can be re-imported
+    — that is the whole point of allowing a delete on an import-only table."""
+    login(client)
+    import_billing({"invoice_no": "DEL-1", "date": "2026-09-01", "dealer": "Delete Dealer",
+                    "bags": 100, "amount": 30000})
+    row = db_session.query(models.Billing).filter_by(invoice_no="DEL-1").one()
+    r = client.post(f"/billing/{row.id}/delete", follow_redirects=True)
+    assert r.status_code == 200
+    db_session.expire_all()
+    assert db_session.query(models.Billing).filter_by(invoice_no="DEL-1").count() == 0
+
+    import_billing({"invoice_no": "DEL-1", "date": "2026-09-01", "dealer": "Delete Dealer",
+                    "bags": 120, "amount": 36000})
+    db_session.expire_all()
+    again = db_session.query(models.Billing).filter_by(invoice_no="DEL-1").one()
+    assert again.bags == 120
+
+
+def test_staff_cannot_delete_billing(client, import_billing, db_session):
+    login(client)
+    import_billing({"invoice_no": "DEL-2", "date": "2026-09-01", "dealer": "Keep Dealer",
+                    "bags": 50, "amount": 15000})
+    row = db_session.query(models.Billing).filter_by(invoice_no="DEL-2").one()
+    client.post("/users/add", data={"username": "staffdel", "password": "pass1234", "role": "staff"})
+    client.get("/logout")
+    login(client, "staffdel", "pass1234")
+    r = client.post(f"/billing/{row.id}/delete", follow_redirects=False)
+    assert r.status_code == 403
+    db_session.expire_all()
+    assert db_session.query(models.Billing).filter_by(invoice_no="DEL-2").count() == 1
+
+
+def test_billing_delete_button_hidden_from_staff(client):
+    login(client)
+    client.post("/users/add", data={"username": "staffview", "password": "pass1234", "role": "staff"})
+    client.get("/logout")
+    login(client, "staffview", "pass1234")
+    r = client.get("/billing")
+    assert r.status_code == 200
+    assert "/delete" not in r.text
+
+
+
+# ---------------------------------------------------------------------------
+# Dispatch -> Excel export
+# ---------------------------------------------------------------------------
+def _dispatch_sheet(response):
+    """Read the downloaded workbook back into a list of rows."""
+    import io as _io
+    import openpyxl
+    wb = openpyxl.load_workbook(_io.BytesIO(response.content))
+    return list(wb["Dispatch"].iter_rows(values_only=True))
+
+
+def _add_dispatch(client, **overrides):
+    data = {"date": "2026-09-05", "dc_no": "DC-X", "dealer_name": "", "new_dealer": "Excel Dealer",
+            "destination": "Rohtak", "district": "Gurugram", "pincode": "122001",
+            "vehicle_no": "HR55XL0001", "transporter_name": "", "new_transporter": "Excel Transport",
+            "product_id": 1, "bags": 200}
+    data.update(overrides)
+    return client.post("/dispatch/add", data=data)
+
+
+def test_dispatch_export_returns_an_xlsx_with_totals(client):
+    login(client)
+    _add_dispatch(client, new_dealer="XL Dealer A", bags=200, date="2026-10-01",
+                  vehicle_no="HR55XL1111")
+    _add_dispatch(client, new_dealer="XL Dealer B", bags=300, date="2026-10-02",
+                  vehicle_no="HR55XL2222")
+    r = client.get("/dispatch/export", params={"vehicle_no": "HR55XL"})
+    assert r.status_code == 200
+    assert "spreadsheetml" in r.headers["content-type"]
+    assert ".xlsx" in r.headers["content-disposition"]
+
+    rows = _dispatch_sheet(r)
+    assert rows[0][0] == "Date" and rows[0][9] == "Bags" and rows[0][10] == "MT"
+    assert rows[-1][0] == "TOTAL"
+    assert rows[-1][9] == 500                      # 200 + 300 bags
+    assert rows[-1][10] == 25.0                    # 500 bags x 50 kg = 25 MT
+
+
+def test_dispatch_export_respects_the_filters(client, db_session):
+    login(client)
+    _add_dispatch(client, new_dealer="Only Me Dealer", bags=120, date="2026-11-01",
+                  vehicle_no="HR66ON0001")
+    _add_dispatch(client, new_dealer="Not Me Dealer", bags=999, date="2026-11-02",
+                  vehicle_no="HR66NO0002")
+    dealer = db_session.query(models.Dealer).filter_by(name="Only Me Dealer").one()
+
+    r = client.get("/dispatch/export", params={"dealer_id": dealer.id})
+    rows = _dispatch_sheet(r)
+    dealers_in_file = {row[2] for row in rows[1:-1]}
+    assert dealers_in_file == {"Only Me Dealer"}
+    assert rows[-1][9] == 120
+
+
+def test_dispatch_export_accepts_blank_filter_fields(client):
+    """The Filter form submits empty strings for untouched fields — the export
+    must treat those as 'no filter', not 422 like a raw typed Query would."""
+    login(client)
+    r = client.get("/dispatch/export", params={"date_from": "", "date_to": "", "product_id": "",
+                                               "dealer_id": "", "transporter_id": "",
+                                               "vehicle_no": ""})
+    assert r.status_code == 200
+
+
+def test_dispatch_page_has_the_excel_button(client):
+    login(client)
+    r = client.get("/dispatch")
+    assert 'formaction="/dispatch/export"' in r.text

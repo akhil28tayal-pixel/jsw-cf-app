@@ -19,6 +19,11 @@ def dashboard(request: Request, db: Session = Depends(get_db), user=Depends(requ
     advance_hold = crud.get_dealer_advance_hold(db, godown_id=active_godown.id if active_godown else None)
     total_advance = sum(r["balance_bags"] for r in advance_hold if r["status"] == "Advance")
     total_hold = sum(-r["balance_bags"] for r in advance_hold if r["status"] == "Hold")
+    # Only dealer+product lines that are actually open, biggest exposure first.
+    open_positions = sorted(
+        (r for r in advance_hold if r["status"] != "Settled"),
+        key=lambda r: -abs(r["balance_bags"]),
+    )
 
     dispatch_q = db.query(models.Dispatch)
     grn_q = db.query(models.GRN)
@@ -32,5 +37,6 @@ def dashboard(request: Request, db: Session = Depends(get_db), user=Depends(requ
         "user": user, "flashes": get_flashed_messages(request),
         "stock": stock, "total_advance": total_advance, "total_hold": total_hold,
         "recent_dispatch": recent_dispatch, "recent_grn": recent_grn,
-        "advance_hold_count": len([r for r in advance_hold if r["status"] != "Settled"]),
+        "open_positions": open_positions,
+        "advance_hold_count": len(open_positions),
     })

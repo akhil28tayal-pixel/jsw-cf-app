@@ -36,6 +36,32 @@
 </div>
 
 <div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-baseline">
+    <h5>Dealers with Advance / Hold</h5>
+    <a href="/dealer-report" class="small">Full report &rarr;</a>
+  </div>
+  <div class="table-responsive table-scroll">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Dealer</th><th>Product</th><th class="num">Billed</th><th class="num">Dispatched</th><th class="num">Balance (Bags)</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in open_positions %}
+      <tr>
+        <td>{{ r.dealer.name if r.dealer else "-" }}</td>
+        <td>{{ r.product.name if r.product else "-" }}</td>
+        <td class="num">{{ "%.0f"|format(r.billed_bags) }}</td>
+        <td class="num">{{ "%.0f"|format(r.dispatched_bags) }}</td>
+        <td class="num fw-bold {{ 'text-danger' if r.balance_bags < 0 else 'text-primary' }}">{{ "%.0f"|format(r.balance_bags) }}</td>
+        <td>{% if r.status == "Advance" %}<span class="badge badge-advance">Advance</span>{% else %}<span class="badge badge-hold">Hold</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="text-center text-muted">All dealers settled — no open advance or hold.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
   <h5>Current Stock by Product</h5>
   <div class="table-responsive">
   <table class="table table-hover">

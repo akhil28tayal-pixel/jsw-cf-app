@@ -10,7 +10,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PORT="${1:-8000}"
-VENV="venv"
+# The virtualenv deliberately lives OUTSIDE this folder. This project sits on
+# the Desktop, which iCloud Drive syncs; with "Optimise Mac Storage" on, iCloud
+# evicts the thousands of library files in a venv and leaves placeholders, and
+# then Python hangs forever mid-import waiting for them to come back. Keeping
+# the venv in ~/.venvs keeps it on the local disk where it belongs.
+VENV="${JSW_VENV:-$HOME/.venvs/jsw_cf}"
+mkdir -p "$(dirname "$VENV")"
 
 # --- find a usable Python (3.10+) -----------------------------------------
 PY=""

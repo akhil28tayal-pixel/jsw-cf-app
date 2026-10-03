@@ -1,17 +1,25 @@
-"""Billing — READ ONLY.
+"""Billing — SAP-import only, with an admin delete for corrections.
 
 Billing rows are created exclusively by the SAP "Sale" import (`/import`).
 There is deliberately no manual-entry endpoint: every invoice must exist in
 SAP first, so Invoice No. stays the single source of truth for
 de-duplication and the dealer advance/hold report can never be thrown off
 by a hand-typed invoice that SAP doesn't have.
+
+Deleting is the one write allowed here, and only for an admin. It exists to
+undo a bad upload (wrong file, wrong active godown, an invoice cancelled in
+SAP after it was imported). Because the importer de-duplicates on Invoice
+No., removing a row frees that number again — re-uploading the correct Sale
+export re-imports the invoice instead of skipping it. That keeps the rule
+intact: whatever is in Billing came from a SAP file.
 """
 from fastapi import APIRouter, Request, Depends, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth import require_login
-from app.flash import get_flashed_messages
+from app.auth import require_login, require_admin
+from app.flash import flash, get_flashed_messages
 from app.godown_context import get_active_godown
 from app import crud, models
 from app.query_utils import parse_date, parse_int
@@ -54,3 +62,20 @@ def billing_page(request: Request, date_from: str = Query(None), date_to: str = 
         "sel_dealer": dealer_id, "search": search or "",
         "last_import": last_import,
     })
+
+
+@router.post("/billing/{billing_id}/delete")
+def delete_billing(billing_id: int, request: Request, db: Session = Depends(get_db),
+                   user=Depends(require_admin)):
+    """Delete one imported invoice. Admin only — see the module docstring."""
+    entry = db.get(models.Billing, billing_id)
+    if not entry:
+        flash(request, "Billing entry not found.", "error")
+        return RedirectResponse("/billing", status_code=303)
+    summary = (f"invoice {entry.invoice_no or '(no number)'} — {entry.bags:.0f} bags of "
+               f"{entry.product.name} billed to {entry.dealer.name} on {entry.date}")
+    db.delete(entry)
+    db.commit()
+    flash(request, f"Deleted {summary}. The dealer Advance/Hold report has updated automatically, "
+                   "and re-importing the Sale export will bring this invoice back.")
+    return RedirectResponse("/billing", status_code=303)
