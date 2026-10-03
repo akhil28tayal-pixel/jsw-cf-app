@@ -56,6 +56,32 @@
   </div>
 </div>
 
+<div class="card p-3 mb-4">
+  <h5>SAP Stock Report &rarr; Reconciliation</h5>
+  <p class="small text-muted">
+    Export the SAP actual-stock report with <strong>Report output</strong> — it comes out as an
+    <code>.html</code> file, not a spreadsheet — and upload it unchanged. Only the
+    <strong>Closing Stock</strong> column is read; SAP's own opening/receipt/issue columns are
+    ignored, because GRN and Dispatch already hold that and counting both would double up.
+    Quantities in MT are converted to bags using each product's bag size.
+  </p>
+  <p class="small text-muted">
+    Pick the godown and the date yourself: the file doesn't say which godown it is, and its
+    From/To Date columns are <code>01.01.0000</code> / <code>31.12.9999</code> placeholders rather
+    than a statement date. Re-uploading the same godown and date replaces those figures.
+  </p>
+  <form method="post" action="/import/sap-stock" enctype="multipart/form-data" class="row g-2">
+    <div class="col-md-3">
+      <select class="form-select" name="godown_id" required>
+        {% for g in godowns %}<option value="{{ g.id }}" {{ "selected" if active_godown and g.id == active_godown.id }}>{{ g.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><input class="form-control" type="date" name="as_of_date" required title="Stock as of this date"></div>
+    <div class="col-md-4"><input class="form-control" type="file" name="file" accept=".html,.htm,.xls" required></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Upload</button></div>
+  </form>
+</div>
+
 <div class="card p-3">
   <h5>Recent Imports</h5>
   <div class="table-responsive">
@@ -65,7 +91,10 @@
     {% for l in logs %}
       <tr>
         <td>{{ l.imported_at.strftime("%d-%b-%y %H:%M") }}</td>
-        <td>{{ "Sale → Billing" if l.import_type == "sale" else "Material In → GRN" }}</td>
+        <td>{% if l.import_type == "sale" %}Sale → Billing
+            {% elif l.import_type == "material_in" %}Material In → GRN
+            {% elif l.import_type == "sap_stock" %}SAP Stock → Reconciliation
+            {% else %}{{ l.import_type }}{% endif %}</td>
         <td>{{ l.godown.name if l.godown else "-" }}</td>
         <td>{{ l.filename or "-" }}</td>
         <td class="num">{{ l.rows_total }}</td>
