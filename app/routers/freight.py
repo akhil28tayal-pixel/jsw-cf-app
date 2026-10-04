@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request, Depends, Query, Form
 from fastapi.responses import RedirectResponse
+from urllib.parse import urlencode
+
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,6 +14,24 @@ from app.query_utils import parse_date, parse_float
 from app.templating import templates
 
 router = APIRouter()
+
+def _filter_query(date_from, date_to, all_godowns) -> str:
+    """Just the filters, as a query string.
+
+    Deliberately NOT request.url.query. Appending the whole query string meant
+    that after one trip to a drill-down and back, /freight carried a stale
+    group=/key= pair, every row link appended its own on top, and FastAPI —
+    which keeps the LAST value of a repeated parameter — sent every vehicle to
+    whichever one had been opened last.
+    """
+    parts = []
+    if date_from:
+        parts.append(("date_from", str(date_from)))
+    if date_to:
+        parts.append(("date_to", str(date_to)))
+    if all_godowns:
+        parts.append(("all_godowns", "1"))
+    return urlencode(parts)
 
 # Both freight sheets carry the same note, so both sheets start their table on
 # the same row and look like one document rather than two.
@@ -34,6 +54,7 @@ def freight_page(request: Request, date_from: str = Query(None), date_to: str = 
         "user": user, "flashes": get_flashed_messages(request),
         "truck_report": truck_report, "transporter_report": transporter_report,
         "date_from": date_from, "date_to": date_to, "showing_all_godowns": bool(all_godowns),
+        "filter_query": _filter_query(date_from, date_to, all_godowns),
     })
 
 
@@ -105,7 +126,7 @@ def freight_trips(request: Request, group: str = Query("vehicle"), key: str = Qu
         "group": group, "group_key": key, "trips": trips,
         "date_from": date_from, "date_to": date_to,
         "showing_all_godowns": bool(all_godowns),
-        "back_query": request.url.query,
+        "filter_query": _filter_query(date_from, date_to, all_godowns),
     })
 
 

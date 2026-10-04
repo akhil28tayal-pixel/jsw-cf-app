@@ -153,3 +153,44 @@ def test_an_absent_box_leaves_the_figure_alone(client, db_session):
     entry = db_session.query(models.FreightEntry).filter_by(dispatch_id=d_id).one()
     assert entry.freight_paid == 2500
     assert entry.remarks == "just a note"
+
+
+def test_row_links_stay_correct_after_coming_back_from_a_drill_down(client):
+    """The reported bug: open one vehicle, press Back, and every vehicle link
+    then opened that same vehicle.
+
+    Back returned to /freight carrying the stale group=/key= pair, each row
+    link appended its own on top, and FastAPI keeps the LAST value of a
+    repeated parameter — so every link resolved to whichever vehicle had been
+    opened last. Only the filters may ride along.
+    """
+    login(client)
+    _add_trip(client, vehicle_no="HR99BK0001", dc_no="BK-1", new_dealer="Back Dealer A")
+    _add_trip(client, vehicle_no="HR99BK0002", dc_no="BK-2", new_dealer="Back Dealer B")
+
+    # Land on /freight the way the Back button used to leave it.
+    html = client.get("/freight", params={"group": "vehicle", "key": "HR99BK0001"}).text
+    for href in [h for h in html.split('"') if h.startswith("/freight/trips")]:
+        assert href.count("key=") == 1, f"link carries a duplicate key: {href}"
+        assert href.count("group=") == 1, f"link carries a duplicate group: {href}"
+
+    # And the second vehicle really does open its own trips from there.
+    trips = client.get("/freight/trips", params={"group": "vehicle", "key": "HR99BK0002"}).text
+    assert "BK-2" in trips and "BK-1" not in trips
+
+
+def test_filters_survive_the_round_trip_but_grouping_does_not(client):
+    login(client)
+    _add_trip(client, vehicle_no="HR99FL0001", date="2026-09-18")
+    html = client.get("/freight", params={"date_from": "2026-09-01", "date_to": "2026-09-30"}).text
+    links = [h for h in html.split('"') if h.startswith("/freight/trips")]
+    assert links, "no drill-down links rendered"
+    assert all("date_from=2026-09-01" in h and "date_to=2026-09-30" in h for h in links)
+
+    trips = client.get("/freight/trips", params={"group": "vehicle", "key": "HR99FL0001",
+                                                 "date_from": "2026-09-01", "date_to": "2026-09-30"}).text
+    # The back link keeps the filters and drops the grouping.
+    back = [h for h in trips.split('"') if h.startswith("/freight?")]
+    assert back, "no back link rendered"
+    assert "date_from=2026-09-01" in back[0]
+    assert "key=" not in back[0] and "group=" not in back[0]

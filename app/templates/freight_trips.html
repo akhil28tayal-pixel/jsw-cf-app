@@ -9,7 +9,7 @@
     period=period_label(date_from, date_to),
     note="The rate card gives a default from ₹/MT by district. Anything typed below is what was actually agreed for that trip and overrides the card — which is how a district with no rate card entry still gets costed. Leave a box empty to go back to the card.") }}
 
-<p class="mb-4"><a class="btn btn-sm btn-outline-secondary" href="/freight{{ ('?' ~ back_query) if back_query }}">&larr; Back to freight report</a></p>
+<p class="mb-4"><a class="btn btn-sm btn-outline-secondary" href="/freight{{ ('?' ~ filter_query) if filter_query }}">&larr; Back to freight report</a></p>
 
 <div class="card">
   <div class="card-head">
@@ -32,7 +32,7 @@
       {% set d = r.dispatch %}
       <tr>
         <form method="post" action="/freight/trip/{{ d.id }}" id="trip{{ d.id }}">
-          <input type="hidden" name="back_to" value="/freight/trips?group={{ group|urlencode }}&amp;key={{ group_key|urlencode }}{{ ('&' ~ back_query) if back_query }}">
+          <input type="hidden" name="back_to" value="/freight/trips?group={{ group|urlencode }}&amp;key={{ group_key|urlencode }}{{ ('&' ~ filter_query) if filter_query }}">
           {# Marks which sides this form actually carries, so an emptied box
              reads as "clear it" rather than "left alone". #}
           <input type="hidden" name="has_paid" value="1">

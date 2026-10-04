@@ -29,7 +29,7 @@
     <tbody>
     {% for vehicle, a in truck_report.items() %}
       <tr>
-        <td class="doc"><a href="/freight/trips?group=vehicle&amp;key={{ vehicle|urlencode }}{{ ('&' ~ request.url.query) if request.url.query }}">{{ vehicle }}</a></td>
+        <td class="doc"><a href="/freight/trips?group=vehicle&amp;key={{ vehicle|urlencode }}{{ ('&' ~ filter_query) if filter_query }}">{{ vehicle }}</a></td>
         <td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
         <td class="num">{{ a.weight_mt|mt }}</td><td class="num fw-bold">₹{{ a.freight_payable|inr }}</td>
         <td>
@@ -65,7 +65,7 @@
     <tbody>
     {% for t, a in transporter_report.items() %}
       <tr>
-        <td><a href="/freight/trips?group=transporter&amp;key={{ t|urlencode }}{{ ('&' ~ request.url.query) if request.url.query }}">{{ t }}</a></td>
+        <td><a href="/freight/trips?group=transporter&amp;key={{ t|urlencode }}{{ ('&' ~ filter_query) if filter_query }}">{{ t }}</a></td>
         <td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
         <td class="num">{{ a.weight_mt|mt }}</td><td class="num fw-bold">₹{{ a.freight_payable|inr }}</td>
         <td>
