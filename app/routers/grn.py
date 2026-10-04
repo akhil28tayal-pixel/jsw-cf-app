@@ -1,16 +1,28 @@
-"""GRN (inward) — READ ONLY.
+"""GRN (inward) — SAP-import only, with an admin delete for corrections.
 
 GRN rows are created exclusively by the SAP "Material In" import
 (`/import`). There is deliberately no manual-entry endpoint: every receipt
 must exist in SAP first, so the app can never hold a GRN that SAP doesn't,
 and Material Document stays the single source of truth for de-duplication.
+
+Deleting is the one write allowed here, and only for an admin. It exists to
+undo a single bad row — a receipt imported against the wrong godown, or one
+cancelled in SAP after import — without throwing away the whole import.
+Because the importer de-duplicates on Material Document, removing a row
+frees that number again, so re-uploading the correct Material In export
+re-imports it rather than skipping it. The rule stays intact: whatever is in
+GRN came from a SAP file.
+
+Removing a receipt lowers stock by the bags it brought in, which is the
+point — but it is also why this is admin-only.
 """
 from fastapi import APIRouter, Request, Depends, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth import require_login
-from app.flash import get_flashed_messages
+from app.auth import require_login, require_admin
+from app.flash import flash, get_flashed_messages
 from app.godown_context import get_active_godown
 from app import crud, models
 from app.query_utils import parse_date, parse_int
@@ -53,3 +65,21 @@ def grn_page(request: Request, date_from: str = Query(None), date_to: str = Quer
         "vehicle_no": vehicle_no or "", "search": search or "",
         "last_import": last_import,
     })
+
+
+@router.post("/grn/{grn_id}/delete")
+def delete_grn(grn_id: int, request: Request, db: Session = Depends(get_db),
+                user=Depends(require_admin)):
+    """Delete one imported receipt. Admin only — see the module docstring."""
+    entry = db.get(models.GRN, grn_id)
+    if not entry:
+        flash(request, "GRN entry not found.", "error")
+        return RedirectResponse("/grn", status_code=303)
+    summary = (f"GRN {entry.sap_grn_no or '(no number)'} — {entry.bags_received:.0f} bags of "
+               f"{entry.product.name} received on {entry.date}"
+               f"{' on ' + entry.vehicle_no if entry.vehicle_no else ''}")
+    db.delete(entry)
+    db.commit()
+    flash(request, f"Deleted {summary}. Stock has dropped by those bags, and re-importing the "
+                   "Material In export will bring this receipt back.")
+    return RedirectResponse("/grn", status_code=303)

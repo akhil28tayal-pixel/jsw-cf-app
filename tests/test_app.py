@@ -527,3 +527,72 @@ def test_dispatch_page_has_the_excel_button(client):
     login(client)
     r = client.get("/dispatch")
     assert 'formaction="/dispatch/export"' in r.text
+
+
+# ---------------------------------------------------------------------------
+# GRN — single-row delete (admin only)
+# ---------------------------------------------------------------------------
+def test_admin_can_delete_a_grn_row_and_stock_drops(client, db_session, import_grn):
+    """Removing a receipt has to lower stock by the bags it brought in —
+    that is the whole reason the delete exists."""
+    login(client)
+    godown = db_session.query(models.Godown).order_by(models.Godown.id).first()
+    product = db_session.query(models.Product).filter_by(name="JSW PPC").first()
+
+    def stock():
+        from app import crud
+        return next(s for s in crud.get_current_stock(db_session, godown.id)
+                    if s["product"].id == product.id)["current_bags"]
+
+    before = stock()
+    import_grn({"material_doc": "ONEDEL-1", "bags_received": 320, "bags_invoice": 320})
+    entry = db_session.query(models.GRN).filter_by(sap_grn_no="ONEDEL-1").one()
+    assert stock() == before + 320
+
+    r = client.post(f"/grn/{entry.id}/delete", follow_redirects=True)
+    assert r.status_code == 200
+    assert db_session.query(models.GRN).filter_by(sap_grn_no="ONEDEL-1").first() is None
+    assert stock() == before
+
+
+def test_deleting_a_grn_frees_its_material_document_for_reimport(client, db_session, import_grn):
+    """De-duplication is on Material Document, so the number has to come free
+    or the corrected file would silently skip the row."""
+    login(client)
+    import_grn({"material_doc": "FREE-1", "bags_received": 100, "bags_invoice": 100})
+    entry = db_session.query(models.GRN).filter_by(sap_grn_no="FREE-1").one()
+    client.post(f"/grn/{entry.id}/delete", follow_redirects=True)
+    # The delete happened in the app's own session; expire ours or we read the
+    # row we already have cached rather than what is in the database.
+    db_session.expire_all()
+    assert db_session.query(models.GRN).filter_by(sap_grn_no="FREE-1").count() == 0
+
+    import_grn({"material_doc": "FREE-1", "bags_received": 140, "bags_invoice": 140})
+    db_session.expire_all()
+    again = db_session.query(models.GRN).filter_by(sap_grn_no="FREE-1").one()
+    assert again.bags_received == 140
+
+
+def test_staff_cannot_delete_a_grn(client, db_session, import_grn):
+    login(client)
+    import_grn({"material_doc": "STAFF-GRN-1", "bags_received": 60, "bags_invoice": 60})
+    entry = db_session.query(models.GRN).filter_by(sap_grn_no="STAFF-GRN-1").one()
+    client.post("/users/add", data={"username": "grn_staff", "password": "staffpass123",
+                                    "role": "staff"})
+    client.post("/logout")
+    client.post("/login", data={"username": "grn_staff", "password": "staffpass123"})
+
+    r = client.post(f"/grn/{entry.id}/delete")
+    assert r.status_code == 403
+    assert db_session.query(models.GRN).filter_by(sap_grn_no="STAFF-GRN-1").first() is not None
+    assert "/delete" not in client.get("/grn").text
+
+
+def test_grn_delete_button_hidden_from_staff(client):
+    login(client)
+    client.post("/users/add", data={"username": "grn_staff2", "password": "staffpass123",
+                                    "role": "staff"})
+    client.post("/logout")
+    client.post("/login", data={"username": "grn_staff2", "password": "staffpass123"})
+    html = client.get("/grn").text
+    assert "Actions" not in html.split("GRN Entries")[1][:400]

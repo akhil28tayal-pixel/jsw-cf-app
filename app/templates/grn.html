@@ -43,7 +43,7 @@
   <h5>GRN Entries {{ "(filtered)" if date_from or date_to or sel_product or vehicle_no or search }}</h5>
   <div class="table-responsive table-scroll">
   <table class="table table-hover">
-    <thead><tr><th>Date</th><th>SAP GRN</th><th>Invoice</th><th>Vehicle</th><th>Product</th><th class="num">Invoice Bags</th><th class="num">Received</th><th class="num">Short/Excess</th><th>Source</th><th>Remarks</th></tr></thead>
+    <thead><tr><th>Date</th><th>SAP GRN</th><th>Invoice</th><th>Vehicle</th><th>Product</th><th class="num">Invoice Bags</th><th class="num">Received</th><th class="num">Short/Excess</th><th>Source</th><th>Remarks</th>{% if user.role == "admin" %}<th class="num">Actions</th>{% endif %}</tr></thead>
     <tbody>
     {% for g in entries %}
       <tr>
@@ -52,9 +52,18 @@
         <td class="num">{{ g.bags_invoice|bags }}</td><td class="num fw-bold">{{ g.bags_received|bags }}</td>
         <td class="num {{ 'text-danger' if g.shortage_excess < 0 else 'text-success' if g.shortage_excess > 0 else '' }}">{{ g.shortage_excess|signed_bags }}</td>
         <td>{{ g.source_plant or "-" }}</td><td>{{ g.remarks or "" }}</td>
+        {% if user.role == "admin" %}
+        <td class="num"><span class="row-actions">
+          <form method="post" action="/grn/{{ g.id }}/delete" class="d-inline"
+                onsubmit="return confirm('Delete GRN {{ g.sap_grn_no or "(no number)" }}?\n\n{{ g.bags_received|bags }} bags of {{ g.product.name }} received on {{ g.date }}{{ " — " ~ g.vehicle_no if g.vehicle_no }}.\n\nStock drops by those bags. Re-importing the Material In export brings it back.');">
+            <button class="btn btn-sm btn-outline-danger"
+                    aria-label="Delete GRN {{ g.sap_grn_no or g.id }}">Delete</button>
+          </form>
+        </span></td>
+        {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="10" class="text-center text-muted">Nothing here yet — import a Material In export from SAP.</td></tr>
+      <tr><td colspan="{{ 11 if user.role == 'admin' else 10 }}" class="text-center text-muted">Nothing here yet — import a Material In export from SAP.</td></tr>
     {% endfor %}
     </tbody>
     {% if entries %}
@@ -63,7 +72,7 @@
       <td class="num">{{ entries|sum(attribute="bags_invoice")|bags }}</td>
       <td class="num">{{ entries|sum(attribute="bags_received")|bags }}</td>
       <td class="num">{{ entries|sum(attribute="shortage_excess")|signed_bags }}</td>
-      <td colspan="2"></td>
+      <td colspan="{{ 3 if user.role == 'admin' else 2 }}"></td>
     </tr></tfoot>
     {% endif %}
   </table>
