@@ -179,6 +179,54 @@
     </div>
 
     <div class="card p-3 mb-4">
+      <h5>Opening Stock <span class="text-muted small">— the baseline each godown counts from</span></h5>
+      <p class="small text-muted">
+        Set this once per product when you start using a godown, or whenever you re-baseline after a
+        physical count. From that date onward the app adds every GRN receipt and subtracts every
+        dispatch automatically, so this is the only stock figure anyone ever types in.
+        Saving again for the same godown and product replaces the figure.
+      </p>
+      {% if opening_stock %}
+      <div class="table-responsive">
+      <table class="table table-sm table-hover">
+        <thead><tr><th>Godown</th><th>Product</th><th class="num">Opening (Bags)</th><th>As of</th></tr></thead>
+        <tbody>
+        {% for o in opening_stock %}
+          <tr>
+            <td>{{ o.godown.name if o.godown else "-" }}</td>
+            <td>{{ o.product.name if o.product else "-" }}</td>
+            <td class="num fw-bold">{{ o.bags|bags }}</td>
+            <td class="doc">{{ o.as_of_date }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p class="small text-muted"><em>No opening stock set yet — every product starts from zero.</em></p>
+      {% endif %}
+      <form method="post" action="/stock/opening" class="row g-2">
+        <div class="col-12 col-sm-6">
+          <select class="form-select" name="godown_id" required aria-label="Godown">
+            {% for g in godowns %}
+              <option value="{{ g.id }}" {{ "selected" if active_godown and active_godown.id == g.id }}>{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-sm-6">
+          <select class="form-select" name="product_id" required aria-label="Product">
+            {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-6"><input class="form-control" type="number" step="1" name="bags"
+               placeholder="Opening Stock (Bags)" required aria-label="Opening stock in bags"></div>
+        <div class="col-6"><input class="form-control" type="date" name="as_of_date" required
+               aria-label="Opening stock as-of date"></div>
+        <div class="col-12"><button class="btn btn-primary w-100">Save opening stock</button></div>
+      </form>
+    </div>
+
+    <div class="card p-3 mb-4">
       <h5>SAP Stock Adjustment <span class="text-muted small">— permanent SAP vs physical gaps</span></h5>
       <p class="small text-muted">
         For a discrepancy that no entry will ever close — material short at a godown handover, say.

@@ -6,22 +6,42 @@
     subtitle="Computed physical stock, and how it compares with SAP.",
     scope=scope_label(active_godown)) }}
 
-<div class="card p-3 mb-4">
-  <h5>Set / Update Opening Stock</h5>
-  <p class="small text-muted">Set this once per product when you start using the app, or whenever you need to re-baseline after a physical count. Everything from this date onward is added/subtracted automatically from GRN and Dispatch entries.</p>
-  <form method="post" action="/stock/opening" class="row g-2">
-    <div class="col-md-4">
-      <select class="form-select" name="product_id" required aria-label="Product">
-        {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="col-md-3"><input class="form-control" type="number" step="1" name="bags" placeholder="Opening Stock (Bags)" required aria-label="Opening Stock (Bags)"></div>
-    <div class="col-md-3"><input class="form-control" type="date" name="as_of_date" required></div>
-    <div class="col-md-2"><button class="btn btn-primary w-100">Save</button></div>
-  </form>
+<div class="card mb-4">
+  <h5>Current Stock (live)</h5>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr><th>Product</th><th class="num">Bag</th><th class="num">Opening (Bags)</th><th>As of</th><th class="num">Received Since</th><th class="num">Dispatched Since</th><th class="num">Current (Bags)</th><th class="num">Current (MT)</th></tr></thead>
+    <tbody>
+    {% for s in stock %}
+      <tr>
+        <td>{{ s.product.name }}</td>
+        <td class="num text-muted">{{ s.bag_weight_kg }} kg</td>
+        <td class="num">{{ s.opening_bags|bags }}</td>
+        <td class="doc">{{ s.as_of_date }}</td>
+        <td class="num">{{ s.received_bags|bags }}</td>
+        <td class="num">{{ s.dispatched_bags|bags }}</td>
+        <td class="num fw-bold">{{ s.current_bags|bags }}</td>
+        <td class="num">{{ s.current_mt|mt }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    {% if stock %}
+    <tfoot><tr>
+      <td colspan="2"><span class="tf-label">Total</span>
+        <span class="tf-count">{{ stock|length }} product{{ "" if stock|length == 1 else "s" }}</span></td>
+      <td class="num">{{ stock|sum(attribute="opening_bags")|bags }}</td>
+      <td></td>
+      <td class="num">{{ stock|sum(attribute="received_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="dispatched_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="current_bags")|bags }}</td>
+      <td class="num">{{ stock|sum(attribute="current_mt")|mt }}</td>
+    </tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
 </div>
 
-<div class="card p-3 mb-4">
+<div class="card mb-4">
   <div class="card-head">
     <h5>SAP vs Physical Reconciliation</h5>
     <span class="d-flex align-items-center gap-3">
@@ -97,9 +117,10 @@
   </div>
 </div>
 
-<div class="card p-3 mb-4">
+
+<div class="card mb-4">
   <h5>Enter a SAP Stock Figure by Hand</h5>
-  <p class="small text-muted">The PDF upload on the Import page fills these in automatically. Use this when a statement won't parse, or to correct one figure. Re-entering the same product and date replaces the figure rather than adding a second one.</p>
+  <p class="small text-muted">The SAP stock report upload on the Import page fills these in automatically. Use this when a statement won't parse, or to correct one figure. Re-entering the same product and date replaces the figure rather than adding a second one.</p>
   <form method="post" action="/stock/sap-figure" class="row g-2">
     <div class="col-md-4">
       <select class="form-select" name="product_id" required aria-label="Product">
@@ -126,26 +147,4 @@
   {% endif %}
 </div>
 
-<div class="card p-3">
-  <h5>Current Stock (live)</h5>
-  <div class="table-responsive">
-  <table class="table table-hover">
-    <thead><tr><th>Product</th><th class="num">Bag</th><th class="num">Opening (Bags)</th><th>As of</th><th class="num">Received Since</th><th class="num">Dispatched Since</th><th class="num">Current (Bags)</th><th class="num">Current (MT)</th></tr></thead>
-    <tbody>
-    {% for s in stock %}
-      <tr>
-        <td>{{ s.product.name }}</td>
-        <td class="num text-muted">{{ s.bag_weight_kg }} kg</td>
-        <td class="num">{{ s.opening_bags|bags }}</td>
-        <td class="doc">{{ s.as_of_date }}</td>
-        <td class="num">{{ s.received_bags|bags }}</td>
-        <td class="num">{{ s.dispatched_bags|bags }}</td>
-        <td class="num fw-bold">{{ s.current_bags|bags }}</td>
-        <td class="num">{{ s.current_mt|mt }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
 {% endblock %}

@@ -530,3 +530,12 @@ def delete_sap_adjustment(db: Session, adjustment_id: int) -> bool:
     db.delete(row)
     db.commit()
     return True
+
+
+def list_opening_stock(db: Session, godown_id: int = None):
+    """Every baseline currently set, for the Masters page. Ordered by godown
+    then product so the two godowns read as separate blocks."""
+    q = db.query(models.OpeningStock)
+    if godown_id:
+        q = q.filter(models.OpeningStock.godown_id == godown_id)
+    return q.order_by(models.OpeningStock.godown_id, models.OpeningStock.product_id).all()

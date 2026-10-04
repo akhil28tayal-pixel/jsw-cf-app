@@ -294,3 +294,50 @@ def test_same_district_costs_differently_from_each_godown(client, db_session):
         payable[godown_id] = sum(r["freight_payable"] for r in rows)
     assert payable[manesar_id] == 5000
     assert payable[daultabad_id] == 8000
+
+
+# ---------------------------------------------------------------------------
+# Opening stock moved to Masters (2026-10-04)
+# ---------------------------------------------------------------------------
+def test_opening_stock_form_lives_on_masters_not_stock(client):
+    """It is a setup action, not a daily one, so it sits with the other
+    masters. The Stock page should open on the live figures instead."""
+    login(client)
+    masters = client.get("/products").text
+    stock = client.get("/stock").text
+    assert 'action="/stock/opening"' in masters
+    assert 'action="/stock/opening"' not in stock
+    # And current stock is now the first thing on the Stock page.
+    assert stock.index("Current Stock") < stock.index("SAP vs Physical Reconciliation")
+
+
+def test_opening_stock_is_admin_only_now(client, db_session):
+    """Re-baselining silently rewrites every stock figure after it, so it
+    belongs behind the same gate as the rest of Masters."""
+    login(client)
+    client.post("/users/add", data={"username": "ops_staff", "password": "staffpass123",
+                                    "role": "staff"})
+    client.post("/logout")
+    client.post("/login", data={"username": "ops_staff", "password": "staffpass123"})
+    r = client.post("/stock/opening", data={"product_id": 1, "bags": 7777,
+                                            "as_of_date": "2026-09-01"})
+    assert r.status_code == 403
+    assert db_session.query(models.OpeningStock).filter_by(bags=7777).first() is None
+
+
+def test_masters_picker_targets_the_chosen_godown_not_the_active_one(client, db_session):
+    """The form carries its own godown, so an admin can set Daultabad's
+    baseline without switching the navbar away from Manesar."""
+    login(client)
+    manesar_id = get_godown_id(db_session, "Manesar Godown")
+    daultabad_id = get_godown_id(db_session, "Daultabad Godown")
+    switch_godown(client, manesar_id)
+
+    client.post("/stock/opening", data={"godown_id": daultabad_id, "product_id": 3,
+                                        "bags": 4321, "as_of_date": "2026-09-01"})
+
+    on_daultabad = db_session.query(models.OpeningStock).filter_by(
+        godown_id=daultabad_id, product_id=3).one()
+    assert on_daultabad.bags == 4321
+    assert db_session.query(models.OpeningStock).filter_by(
+        godown_id=manesar_id, product_id=3).first() is None

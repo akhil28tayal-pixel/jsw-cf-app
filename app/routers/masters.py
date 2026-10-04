@@ -48,6 +48,7 @@ def masters_page(request: Request, rate_godown_id: str = Query(None),
 
     return templates.TemplateResponse(request, "masters.html", {
         "sap_adjustments": crud.list_sap_adjustments(db),
+        "opening_stock": crud.list_opening_stock(db),
         "user": user, "flashes": get_flashed_messages(request),
         "godowns": godowns,
         "active_godown": active_godown,

@@ -5,10 +5,11 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth import require_login
+from app.auth import require_login, require_admin
 from app.flash import flash, get_flashed_messages
 from app.godown_context import get_active_godown
-from app import crud, reporting
+from app import crud, models, reporting
+from app.query_utils import parse_int
 
 from app.templating import templates
 
@@ -45,12 +46,26 @@ def set_sap_stock_figure(request: Request, product_id: int = Form(...), bags: fl
 
 @router.post("/stock/opening")
 def set_opening_stock(request: Request, product_id: int = Form(...), bags: float = Form(...),
-                       as_of_date: dt.date = Form(...), db: Session = Depends(get_db),
-                       user=Depends(require_login)):
-    active_godown = get_active_godown(request, db)
-    crud.upsert_opening_stock(db, active_godown.id, product_id, bags, as_of_date)
-    flash(request, f"Opening stock updated for {active_godown.name}.")
-    return RedirectResponse("/stock", status_code=303)
+                       as_of_date: dt.date = Form(...), godown_id: str = Form(None),
+                       db: Session = Depends(get_db), user=Depends(require_admin)):
+    """Set the baseline a godown counts from.
+
+    This lives on the Masters page rather than Stock: it is a setup action, not
+    a daily one, and re-baselining silently rewrites every stock figure that
+    follows — so it is admin-only, like the other masters.
+
+    The godown comes from the form, falling back to the active one. That keeps
+    the Masters picker working without forcing a godown onto callers that
+    simply mean "the one I'm looking at".
+    """
+    godown_id = parse_int(godown_id)
+    godown = db.get(models.Godown, godown_id) if godown_id else get_active_godown(request, db)
+    if godown is None:
+        flash(request, "Pick a godown first.", "warning")
+        return RedirectResponse("/products", status_code=303)
+    crud.upsert_opening_stock(db, godown.id, product_id, bags, as_of_date)
+    flash(request, f"Opening stock updated for {godown.name}.")
+    return RedirectResponse("/products", status_code=303)
 
 
 @router.get("/stock/export")
