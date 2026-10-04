@@ -6,7 +6,7 @@
     subtitle="Truck-wise and transporter-wise, rated from the dispatching godown's rate card.",
     scope=scope_label(active_godown, showing_all_godowns),
     period=period_label(date_from, date_to),
-    note="Rates are matched by pincode first, then district. A truck marked \"rate not set\" has no rate card entry — an admin can add one under Masters. These are amounts payable to transporters, not the rate claimed from JSW.") }}
+    note="Rates are matched by pincode first, then district. A trip with no matching rate card entry shows as unrated — either add the rate under Masters, or click the vehicle or transporter to open its trips and type the freight actually agreed. A typed amount always wins over the rate card. These are amounts payable to transporters, not the rate claimed from JSW.") }}
 
 <div class="card p-3 mb-4 filter-card">
 <form method="get" action="/freight" class="row g-2 align-items-center">
@@ -25,13 +25,17 @@
   <h5>By Vehicle</h5>
   <div class="table-responsive">
   <table class="table table-hover">
-    <thead><tr><th>Vehicle No.</th><th class="num">Trips</th><th class="num">Bags</th><th class="num">Weight (MT)</th><th class="num">Freight Payable (₹)</th><th>Missing Rate</th></tr></thead>
+    <thead><tr><th>Vehicle No.</th><th class="num">Trips</th><th class="num">Bags</th><th class="num">Weight (MT)</th><th class="num">Freight Payable (₹)</th><th>Rate status</th></tr></thead>
     <tbody>
     {% for vehicle, a in truck_report.items() %}
       <tr>
-        <td class="doc">{{ vehicle }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
+        <td class="doc"><a href="/freight/trips?group=vehicle&amp;key={{ vehicle|urlencode }}{{ ('&' ~ request.url.query) if request.url.query }}">{{ vehicle }}</a></td>
+        <td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
         <td class="num">{{ a.weight_mt|mt }}</td><td class="num fw-bold">₹{{ a.freight_payable|inr }}</td>
-        <td>{% if a.missing_rate %}<span class="badge bg-warning text-dark">{{ a.missing_rate }} trip(s)</span>{% endif %}</td>
+        <td>
+          {%- if a.missing_rate %}<span class="badge bg-warning">{{ a.missing_rate }} unrated</span>{% endif %}
+          {%- if a.manual_trips %} <span class="badge bg-secondary">{{ a.manual_trips }} entered</span>{% endif %}
+        </td>
       </tr>
     {% else %}
       <tr><td colspan="6" class="text-center text-muted">No dispatch data yet.</td></tr>
@@ -45,7 +49,8 @@
       <td class="num">{{ rs|sum(attribute="bags")|bags }}</td>
       <td class="num">{{ rs|sum(attribute="weight_mt")|mt }}</td>
       <td class="num">₹{{ rs|sum(attribute="freight_payable")|inr }}</td>
-      <td class="tf-count">{% set miss = rs|sum(attribute="missing_rate") %}{{ (miss ~ " unrated") if miss else "" }}</td>
+      <td class="tf-count">{% set miss = rs|sum(attribute="missing_rate") %}{% set man = rs|sum(attribute="manual_trips") %}
+        {{- (miss ~ " unrated") if miss else "" }}{{ (", " if miss and man else "") ~ (man ~ " entered" if man else "") }}</td>
     </tr></tfoot>
     {% endif %}
   </table>
@@ -56,13 +61,17 @@
   <h5>By Transporter</h5>
   <div class="table-responsive">
   <table class="table table-hover">
-    <thead><tr><th>Transporter</th><th class="num">Trips</th><th class="num">Bags</th><th class="num">Weight (MT)</th><th class="num">Freight Payable (₹)</th><th>Missing Rate</th></tr></thead>
+    <thead><tr><th>Transporter</th><th class="num">Trips</th><th class="num">Bags</th><th class="num">Weight (MT)</th><th class="num">Freight Payable (₹)</th><th>Rate status</th></tr></thead>
     <tbody>
     {% for t, a in transporter_report.items() %}
       <tr>
-        <td>{{ t }}</td><td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
+        <td><a href="/freight/trips?group=transporter&amp;key={{ t|urlencode }}{{ ('&' ~ request.url.query) if request.url.query }}">{{ t }}</a></td>
+        <td class="num">{{ a.trips }}</td><td class="num">{{ a.bags|bags }}</td>
         <td class="num">{{ a.weight_mt|mt }}</td><td class="num fw-bold">₹{{ a.freight_payable|inr }}</td>
-        <td>{% if a.missing_rate %}<span class="badge bg-warning text-dark">{{ a.missing_rate }} trip(s)</span>{% endif %}</td>
+        <td>
+          {%- if a.missing_rate %}<span class="badge bg-warning">{{ a.missing_rate }} unrated</span>{% endif %}
+          {%- if a.manual_trips %} <span class="badge bg-secondary">{{ a.manual_trips }} entered</span>{% endif %}
+        </td>
       </tr>
     {% else %}
       <tr><td colspan="6" class="text-center text-muted">No dispatch data yet.</td></tr>
@@ -76,7 +85,8 @@
       <td class="num">{{ rs|sum(attribute="bags")|bags }}</td>
       <td class="num">{{ rs|sum(attribute="weight_mt")|mt }}</td>
       <td class="num">₹{{ rs|sum(attribute="freight_payable")|inr }}</td>
-      <td class="tf-count">{% set miss = rs|sum(attribute="missing_rate") %}{{ (miss ~ " unrated") if miss else "" }}</td>
+      <td class="tf-count">{% set miss = rs|sum(attribute="missing_rate") %}{% set man = rs|sum(attribute="manual_trips") %}
+        {{- (miss ~ " unrated") if miss else "" }}{{ (", " if miss and man else "") ~ (man ~ " entered" if man else "") }}</td>
     </tr></tfoot>
     {% endif %}
   </table>

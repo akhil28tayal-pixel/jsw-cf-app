@@ -209,6 +209,36 @@ class ImportLog(Base):
     godown = relationship("Godown")
 
 
+class FreightEntry(Base):
+    """The freight actually agreed for one dispatch, typed in by hand.
+
+    The rate card computes a default from ₹/MT by district, which is the
+    agreed rate. This is what really happened on that truck: a negotiated
+    figure, a return-load discount, or simply the amount for a district with
+    no rate card entry at all. Where a row exists here it WINS over the card,
+    and the trip stops being reported as unrated.
+
+    One row per dispatch, so the figure rolls up correctly into both the
+    vehicle-wise and transporter-wise views without being counted twice.
+
+    `freight_claim` is the other half: what is claimed back from JSW for the
+    same trip. Both sides are needed, because the Claims page reads the margin
+    as claimable minus paid — filling in only what was paid would drive that
+    margin deeply negative and wrong.
+    """
+    __tablename__ = "freight_entry"
+    id = Column(Integer, primary_key=True)
+    dispatch_id = Column(Integer, ForeignKey("dispatch.id"), nullable=False, unique=True, index=True)
+    freight_paid = Column(Float, nullable=True)      # to the transporter
+    freight_claim = Column(Float, nullable=True)     # from JSW
+    remarks = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
+
+    dispatch = relationship("Dispatch")
+
+
 class SapStockSnapshot(Base):
     """What SAP says is in the godown, as of one date, for one product.
 

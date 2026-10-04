@@ -289,8 +289,17 @@ def get_dispatch_freight_rows(db: Session, godown_id: Optional[int] = None, date
     if date_to:
         q = q.filter(models.Dispatch.date <= date_to)
 
+    dispatches = q.order_by(models.Dispatch.date, models.Dispatch.id).all()
+
+    # One query for the hand-entered amounts rather than one per trip.
+    entries = {}
+    if dispatches:
+        ids = [d.id for d in dispatches]
+        for e in db.query(models.FreightEntry).filter(models.FreightEntry.dispatch_id.in_(ids)).all():
+            entries[e.dispatch_id] = e
+
     rows = []
-    for d in q.order_by(models.Dispatch.date).all():
+    for d in dispatches:
         rate = find_rate_card(db, d.godown_id, d.district, d.pincode)
         # Freight is charged per MT, so the truck's weight has to use the bag
         # size of the product actually on it — 400 bags of Microfine is 8 MT,
@@ -298,23 +307,43 @@ def get_dispatch_freight_rows(db: Session, godown_id: Optional[int] = None, date
         weight_mt = (d.bags or 0) * product_bag_weight_mt(db, d.product)
         transporter_rate = rate.transporter_rate_per_mt if rate else None
         company_rate = rate.company_claim_rate_per_mt if rate else None
+
+        card_payable = (weight_mt * transporter_rate) if transporter_rate is not None else None
+        card_claimable = (weight_mt * company_rate) if company_rate is not None else None
+
+        # A typed amount is what actually happened, so it beats the card. Each
+        # side is decided on its own: someone may know what they paid long
+        # before they know what they will claim.
+        entry = entries.get(d.id)
+        payable = entry.freight_paid if (entry and entry.freight_paid is not None) else card_payable
+        claimable = entry.freight_claim if (entry and entry.freight_claim is not None) else card_claimable
+
         rows.append({
             "dispatch": d,
             "weight_mt": weight_mt,
             "rate_found": rate is not None,
             "transporter_rate_per_mt": transporter_rate,
             "company_rate_per_mt": company_rate,
-            "freight_payable": (weight_mt * transporter_rate) if transporter_rate is not None else None,
-            "freight_claimable": (weight_mt * company_rate) if company_rate is not None else None,
+            "card_payable": card_payable,
+            "card_claimable": card_claimable,
+            "entry": entry,
+            "manual_payable": bool(entry and entry.freight_paid is not None),
+            "manual_claimable": bool(entry and entry.freight_claim is not None),
+            "freight_payable": payable,
+            "freight_claimable": claimable,
         })
     return rows
 
 
 def _aggregate_freight(rows, key_fn):
     agg = defaultdict(lambda: {"bags": 0.0, "weight_mt": 0.0, "freight_payable": 0.0,
-                                "freight_claimable": 0.0, "trips": 0, "missing_rate": 0})
+                                "freight_claimable": 0.0, "trips": 0, "missing_rate": 0,
+                                "manual_trips": 0, "key": None})
     for r in rows:
         a = agg[key_fn(r)]
+        a["key"] = key_fn(r)
+        if r["manual_payable"]:
+            a["manual_trips"] += 1
         a["bags"] += r["dispatch"].bags or 0
         a["weight_mt"] += r["weight_mt"]
         a["trips"] += 1
@@ -539,3 +568,57 @@ def list_opening_stock(db: Session, godown_id: int = None):
     if godown_id:
         q = q.filter(models.OpeningStock.godown_id == godown_id)
     return q.order_by(models.OpeningStock.godown_id, models.OpeningStock.product_id).all()
+
+
+def freight_trips_for(db: Session, group: str, key: str, godown_id: Optional[int] = None,
+                      date_from=None, date_to=None):
+    """The individual trips behind one row of the freight report.
+
+    `group` is "vehicle" or "transporter"; `key` is the label that row was
+    grouped under, including the "(no vehicle no.)" / "(no transporter)"
+    placeholders, so a row can always be opened even when the field is blank.
+    """
+    rows = get_dispatch_freight_rows(db, godown_id, date_from, date_to)
+    if group == "transporter":
+        def label(r):
+            d = r["dispatch"]
+            return d.transporter.name if d.transporter else "(no transporter)"
+    else:
+        def label(r):
+            return r["dispatch"].vehicle_no or "(no vehicle no.)"
+    return [r for r in rows if label(r) == key]
+
+
+def upsert_freight_entry(db: Session, dispatch_id: int, freight_paid=None, freight_claim=None,
+                         remarks: str = None, user_id: int = None, clear_paid: bool = False,
+                         clear_claim: bool = False):
+    """Record what a trip actually cost, and what will be claimed for it.
+
+    A blank field leaves that side alone rather than wiping it, so someone
+    entering the paid amount today does not erase a claim figure entered last
+    week. Clearing is explicit via clear_paid / clear_claim.
+    """
+    entry = db.query(models.FreightEntry).filter(
+        models.FreightEntry.dispatch_id == dispatch_id).first()
+    if entry is None:
+        entry = models.FreightEntry(dispatch_id=dispatch_id)
+        db.add(entry)
+    if clear_paid:
+        entry.freight_paid = None
+    elif freight_paid is not None:
+        entry.freight_paid = freight_paid
+    if clear_claim:
+        entry.freight_claim = None
+    elif freight_claim is not None:
+        entry.freight_claim = freight_claim
+    if remarks is not None:
+        entry.remarks = remarks or None
+    entry.created_by = user_id or entry.created_by
+    db.commit()
+
+    # A row holding nothing is noise; drop it so the trip reverts to the card.
+    if entry.freight_paid is None and entry.freight_claim is None and not entry.remarks:
+        db.delete(entry)
+        db.commit()
+        return None
+    return entry

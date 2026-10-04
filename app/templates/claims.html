@@ -36,7 +36,7 @@
     <div class="card p-3 stat stat-ok">
       <div class="stat-label">Secondary Freight Claimable</div>
       <div class="stat-value pos"><span class="unit me-1">₹</span>{{ report.freight_claimable_from_company|inr }}</div>
-      <div class="stat-note">Billed to JSW at the company rate card</div>
+      <div class="stat-note">Company rate card, or the claim entered against a trip</div>
     </div>
   </div>
   <div class="col-md-4">
@@ -53,7 +53,7 @@
     <div class="card p-3 stat stat-mute">
       <div class="stat-label">Freight Actually Paid to Transporters</div>
       <div class="stat-value"><span class="unit me-1">₹</span>{{ report.freight_paid_to_transporters|inr }}</div>
-      <div class="stat-note">At your transporter rate card</div>
+      <div class="stat-note">Rate card, or the figure entered against a trip on the Freight page</div>
     </div>
   </div>
   <div class="col-md-6">

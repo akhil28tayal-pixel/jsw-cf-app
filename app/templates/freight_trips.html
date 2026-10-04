@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Freight — {{ group_key }}{% endblock %}
+{% block content %}
+{% from "macros.html" import report_head, scope_label, period_label with context %}
+{{ report_head(
+    ("Trips for " ~ group_key),
+    subtitle=("Every dispatch grouped under this " ~ ("transporter" if group == "transporter" else "vehicle") ~ "."),
+    scope=scope_label(active_godown, showing_all_godowns),
+    period=period_label(date_from, date_to),
+    note="The rate card gives a default from ₹/MT by district. Anything typed below is what was actually agreed for that trip and overrides the card — which is how a district with no rate card entry still gets costed. Leave a box empty to go back to the card.") }}
+
+<p class="mb-4"><a class="btn btn-sm btn-outline-secondary" href="/freight{{ ('?' ~ back_query) if back_query }}">&larr; Back to freight report</a></p>
+
+<div class="card">
+  <div class="card-head">
+    <h5>{{ trips|length }} trip{{ "" if trips|length == 1 else "s" }}</h5>
+    <span class="small text-muted">{{ "Freight paid is what you owe the transporter." if user.role != "admin"
+        else "Paid is what you owe the transporter; Claim is what you bill JSW. The difference is your margin." }}</span>
+  </div>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr>
+      <th style="width: 6.5rem;">Date</th><th>DC No.</th><th>Dealer</th><th>Product</th>
+      <th class="num">Bags</th><th class="num">MT</th><th>District</th>
+      <th class="num">Rate card</th>
+      <th class="num" style="width: 7rem;">Freight paid (₹)</th>
+      {% if user.role == "admin" %}<th class="num" style="width: 7rem;">Claim from JSW (₹)</th>{% endif %}
+      <th style="width: 9rem;">Note</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in trips %}
+      {% set d = r.dispatch %}
+      <tr>
+        <form method="post" action="/freight/trip/{{ d.id }}" id="trip{{ d.id }}">
+          <input type="hidden" name="back_to" value="/freight/trips?group={{ group|urlencode }}&amp;key={{ group_key|urlencode }}{{ ('&' ~ back_query) if back_query }}">
+          {# Marks which sides this form actually carries, so an emptied box
+             reads as "clear it" rather than "left alone". #}
+          <input type="hidden" name="has_paid" value="1">
+          {% if user.role == "admin" %}<input type="hidden" name="has_claim" value="1">{% endif %}
+        </form>
+        <td class="doc">{{ d.date }}</td>
+        <td class="doc">{{ d.dc_no or "-" }}</td>
+        <td>{{ d.dealer.name if d.dealer else "-" }}</td>
+        <td>{{ d.product.name if d.product else "-" }}</td>
+        <td class="num">{{ d.bags|bags }}</td>
+        <td class="num">{{ r.weight_mt|mt }}</td>
+        <td>{{ d.district or "-" }}{% if d.pincode %} <span class="text-muted">{{ d.pincode }}</span>{% endif %}</td>
+        <td class="num">
+          {%- if r.card_payable is not none %}₹{{ r.card_payable|inr }}
+          {%- else %}<span class="badge bg-warning">no rate</span>{% endif %}
+        </td>
+        <td class="num">
+          <input class="form-control form-control-sm num" form="trip{{ d.id }}" type="number" step="0.01"
+                 name="freight_paid" value="{{ '%.2f'|format(r.entry.freight_paid) if r.entry and r.entry.freight_paid is not none else '' }}"
+                 placeholder="{{ '%.0f'|format(r.card_payable) if r.card_payable is not none else '—' }}"
+                 aria-label="Freight paid for DC {{ d.dc_no or d.id }}">
+        </td>
+        {% if user.role == "admin" %}
+        <td class="num">
+          <input class="form-control form-control-sm num" form="trip{{ d.id }}" type="number" step="0.01"
+                 name="freight_claim" value="{{ '%.2f'|format(r.entry.freight_claim) if r.entry and r.entry.freight_claim is not none else '' }}"
+                 placeholder="{{ '%.0f'|format(r.card_claimable) if r.card_claimable is not none else '—' }}"
+                 aria-label="Claim from JSW for DC {{ d.dc_no or d.id }}">
+        </td>
+        {% endif %}
+        <td>
+          <input class="form-control form-control-sm" form="trip{{ d.id }}" name="remarks"
+                 value="{{ r.entry.remarks if r.entry and r.entry.remarks else '' }}"
+                 placeholder="why this figure" aria-label="Note for DC {{ d.dc_no or d.id }}">
+        </td>
+        <td class="num"><span class="row-actions">
+          <button class="btn btn-sm btn-outline-primary" form="trip{{ d.id }}">Save</button>
+        </span></td>
+      </tr>
+    {% else %}
+      <tr class="table-empty"><td colspan="{{ 12 if user.role == 'admin' else 11 }}">
+        <span class="empty-title">No trips here</span>
+        <span class="empty-hint">Nothing matches this {{ group }} within the filters you came from.</span>
+      </td></tr>
+    {% endfor %}
+    </tbody>
+    {% if trips %}
+    <tfoot><tr>
+      <td colspan="4"><span class="tf-label">Total</span>
+        <span class="tf-count">{{ trips|length }} trip{{ "" if trips|length == 1 else "s" }}</span></td>
+      <td class="num">{{ trips|sum(attribute="dispatch.bags")|bags }}</td>
+      <td class="num">{{ trips|sum(attribute="weight_mt")|mt }}</td>
+      <td></td>
+      <td class="num">{% set carded = trips|rejectattr("card_payable", "none")|list %}
+        {{- ("₹" ~ carded|sum(attribute="card_payable")|inr) if carded else "—" }}</td>
+      <td class="num">{% set paid = trips|rejectattr("freight_payable", "none")|list %}
+        {{- ("₹" ~ paid|sum(attribute="freight_payable")|inr) if paid else "—" }}</td>
+      {% if user.role == "admin" %}
+      <td class="num">{% set clm = trips|rejectattr("freight_claimable", "none")|list %}
+        {{- ("₹" ~ clm|sum(attribute="freight_claimable")|inr) if clm else "—" }}</td>
+      {% endif %}
+      <td colspan="2" class="tf-count">
+        {%- set manual = trips|selectattr("manual_payable")|list %}
+        {{- (manual|length ~ " entered by hand") if manual else "all from the rate card" }}</td>
+    </tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
+</div>
+{% endblock %}
