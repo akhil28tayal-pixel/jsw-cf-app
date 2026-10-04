@@ -622,3 +622,80 @@ def upsert_freight_entry(db: Session, dispatch_id: int, freight_paid=None, freig
         db.commit()
         return None
     return entry
+
+
+# ---------------------------------------------------------------------------
+# Undoing an import
+#
+# GRN and Billing are SAP-only registers: nothing can be typed into them, so
+# the only way to correct a bad upload is to remove what it brought in and
+# import a corrected file. Because every row records the import that made it,
+# that removal is exact rather than inferred from timestamps.
+# ---------------------------------------------------------------------------
+IMPORT_ROW_MODELS = {
+    "billing": models.Billing,
+    "grn": models.GRN,
+    "sap_stock_snapshot": models.SapStockSnapshot,
+}
+
+
+def import_log_contents(db: Session, log_id: int) -> dict:
+    """How many rows of each kind this import is still responsible for."""
+    counts = {}
+    for name, model in IMPORT_ROW_MODELS.items():
+        counts[name] = db.query(func.count(model.id)).filter(
+            model.import_log_id == log_id).scalar() or 0
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+def import_log_counts(db: Session, log_ids) -> dict:
+    """The same thing for a page of logs, without a query per row."""
+    out = {log_id: {"billing": 0, "grn": 0, "sap_stock_snapshot": 0, "total": 0}
+           for log_id in log_ids}
+    if not log_ids:
+        return out
+    for name, model in IMPORT_ROW_MODELS.items():
+        rows = (db.query(model.import_log_id, func.count(model.id))
+                .filter(model.import_log_id.in_(list(log_ids)))
+                .group_by(model.import_log_id).all())
+        for log_id, n in rows:
+            if log_id in out:
+                out[log_id][name] = n
+                out[log_id]["total"] += n
+    return out
+
+
+def delete_import(db: Session, log_id: int) -> dict:
+    """Remove everything one import brought in, then the log itself.
+
+    Returns what was deleted. A SAP stock snapshot that was later corrected by
+    hand is left alone: `source` stops being "html" once someone retypes it,
+    and silently discarding that correction would be worse than leaving a row
+    behind.
+    """
+    log = db.get(models.ImportLog, log_id)
+    if log is None:
+        return {}
+
+    deleted = {}
+    for name, model in IMPORT_ROW_MODELS.items():
+        q = db.query(model).filter(model.import_log_id == log_id)
+        if name == "sap_stock_snapshot":
+            q = q.filter(model.source == "html")
+        rows = q.all()
+        for row in rows:
+            db.delete(row)
+        deleted[name] = len(rows)
+
+    # Any snapshot kept above would dangle, so drop just the link.
+    db.query(models.SapStockSnapshot).filter(
+        models.SapStockSnapshot.import_log_id == log_id).update({"import_log_id": None})
+
+    deleted["filename"] = log.filename
+    deleted["import_type"] = log.import_type
+    deleted["godown"] = log.godown.name if log.godown else None
+    db.delete(log)
+    db.commit()
+    deleted["total"] = sum(v for k, v in deleted.items() if isinstance(v, int))
+    return deleted

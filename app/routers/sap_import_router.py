@@ -24,6 +24,7 @@ def import_page(request: Request, db: Session = Depends(get_db), user=Depends(re
         "user": user, "flashes": get_flashed_messages(request),
         "logs": logs, "unmapped": unmapped, "products": crud.list_products(db),
         "godowns": crud.list_godowns(db),
+        "log_counts": crud.import_log_counts(db, [l.id for l in logs]),
     })
 
 
@@ -97,3 +98,31 @@ async def import_sap_stock(request: Request, file: UploadFile = File(...),
     flash(request, f"SAP stock for {godown.name} as of {as_of_date}: {result.summary()} "
                    f"See the reconciliation on the Stock page.", category)
     return RedirectResponse("/stock", status_code=303)
+
+
+@router.post("/import/{log_id}/delete")
+def delete_import(log_id: int, request: Request, db: Session = Depends(get_db),
+                   user=Depends(require_admin)):
+    """Undo one SAP import: remove every row it brought in, then the log.
+
+    GRN and Billing can only ever come from an import, so this is the sanctioned
+    way to correct a bad upload — delete it, then upload the corrected file.
+    Admin only, because it removes operational records.
+    """
+    log = db.get(models.ImportLog, log_id)
+    if log is None:
+        flash(request, "That import has already been deleted.", "warning")
+        return RedirectResponse("/import", status_code=303)
+
+    label = f"{log.filename or log.import_type} ({log.godown.name if log.godown else 'no godown'})"
+    result = crud.delete_import(db, log_id)
+
+    bits = []
+    for key, word in (("billing", "billing row"), ("grn", "GRN row"),
+                      ("sap_stock_snapshot", "stock figure")):
+        n = result.get(key, 0)
+        if n:
+            bits.append(f"{n} {word}{'' if n == 1 else 's'}")
+    detail = ", ".join(bits) if bits else "no rows were still linked to it"
+    flash(request, f"Deleted import {label} — {detail}. Re-upload a corrected file to bring it back.")
+    return RedirectResponse("/import", status_code=303)

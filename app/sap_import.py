@@ -73,6 +73,9 @@ class ImportResult:
     rows_skipped_other: int = 0
     unmapped_codes: set = field(default_factory=set)
     messages: list = field(default_factory=list)
+    # (table name, row id) for every row this run created, so log_import can
+    # stamp them with the log id and the import becomes undoable.
+    created_rows: list = field(default_factory=list)
 
     def summary(self) -> str:
         parts = [f"{self.rows_imported} imported"]
@@ -211,6 +214,7 @@ def import_sale_file(db: Session, file_bytes: bytes, godown_id: int, user_id: Op
         try:
             db.commit()
             result.rows_imported += 1
+            result.created_rows.append(("billing", entry.id))
         except IntegrityError:
             db.rollback()
             result.rows_skipped_duplicate += 1
@@ -290,6 +294,7 @@ def import_material_in_file(db: Session, file_bytes: bytes, godown_id: int, user
         try:
             db.commit()
             result.rows_imported += 1
+            result.created_rows.append(("grn", entry.id))
         except IntegrityError:
             db.rollback()
             result.rows_skipped_duplicate += 1
@@ -310,4 +315,16 @@ def log_import(db: Session, import_type: str, filename: str, user_id: Optional[i
     )
     db.add(log)
     db.commit()
+
+    # Now that the log has an id, point every row this run created at it. The
+    # rows have to be created first (the importer commits each one to catch
+    # duplicates), so the link can only be made here.
+    for table, row_id in result.created_rows:
+        model = {"billing": models.Billing, "grn": models.GRN,
+                 "sap_stock_snapshot": models.SapStockSnapshot}.get(table)
+        if model is None:
+            continue
+        db.query(model).filter(model.id == row_id).update({"import_log_id": log.id})
+    if result.created_rows:
+        db.commit()
     return log

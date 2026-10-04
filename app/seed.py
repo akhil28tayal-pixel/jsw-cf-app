@@ -7,7 +7,7 @@ from app.database import Base, engine, SessionLocal
 from app import models
 from app.auth import hash_password
 from app.config import settings
-from app.migrations import run_migrations
+from app.migrations import run_migrations, link_imports_to_their_rows as run_portable_migrations
 
 logger = logging.getLogger("jsw_cf_app")
 
@@ -56,6 +56,10 @@ def init_db_and_seed():
         if "already exists" not in str(e).lower():
             raise
         logger.info("Tables already created by a concurrent process — continuing.")
+
+    # Runs on every dialect, and AFTER create_all so new tables are present
+    # too: create_all only creates missing tables, never missing columns.
+    run_portable_migrations(engine)
 
     db: Session = SessionLocal()
     try:

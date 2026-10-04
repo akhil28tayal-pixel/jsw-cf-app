@@ -16,6 +16,7 @@ This must run BEFORE Base.metadata.create_all(), so it only ever touches
 tables that already exist with the old shape; genuinely new tables are left
 alone for create_all() to create correctly afterward.
 """
+import datetime as dt
 import logging
 
 from sqlalchemy import inspect, text
@@ -153,3 +154,97 @@ def run_migrations(engine: Engine) -> None:
                 "UPDATE products SET bag_weight_mt = 0.02 WHERE UPPER(name) LIKE '%MICROFINE%'"
             ))
             logger.info("Added per-product bag_weight_mt (Microfine products set to a 20 kg bag).")
+
+
+# ---------------------------------------------------------------------------
+# Link existing GRN / Billing / SAP-stock rows to the import that created them
+#
+# Unlike run_migrations above, this one runs on EVERY dialect. It has to: the
+# column is needed on Postgres too, and create_all() only ever creates missing
+# TABLES — it will not add a column to a table that already exists.
+#
+# "ALTER TABLE ... ADD COLUMN <nullable>" is the one piece of DDL SQLite and
+# Postgres agree on, which is why the column is a plain integer with no
+# constraint added after the fact; new databases get the real foreign key from
+# the model.
+# ---------------------------------------------------------------------------
+LINKED_TABLES = {
+    "grn": "material_in",
+    "billing": "sale",
+    "sap_stock_snapshot": "sap_stock",
+}
+
+
+def _as_datetime(value):
+    """SQLite hands back a string for a DATETIME column, Postgres a datetime."""
+    if value is None or isinstance(value, dt.datetime):
+        return value
+    try:
+        return dt.datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def link_imports_to_their_rows(engine: Engine) -> None:
+    """Add import_log_id where missing, then backfill it for existing rows.
+
+    Backfill rule: a row belongs to the FIRST import of its own type and godown
+    whose log was written at or after the row was created. That is exactly the
+    order the importer works in — every row is committed, then the log is
+    written — so the next log after a row is the one that made it.
+
+    Nothing here invents a link: a row with no later log of the right type
+    simply stays NULL and is reported as unlinked rather than guessed at.
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("import_log"):
+        return
+
+    for table in LINKED_TABLES:
+        if not inspector.has_table(table):
+            continue
+        columns = [c["name"] for c in inspector.get_columns(table)]
+        if "import_log_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN import_log_id INTEGER"))
+            logger.info("Added %s.import_log_id.", table)
+
+    with engine.begin() as conn:
+        for table, import_type in LINKED_TABLES.items():
+            if not inspector.has_table(table):
+                continue
+            unlinked = conn.execute(text(
+                f"SELECT id, godown_id, created_at FROM {table} WHERE import_log_id IS NULL"
+            )).fetchall()
+            if not unlinked:
+                continue
+
+            logs = [
+                (row[0], row[1], _as_datetime(row[2]))
+                for row in conn.execute(text(
+                    "SELECT id, godown_id, imported_at FROM import_log "
+                    "WHERE import_type = :t ORDER BY imported_at"
+                ), {"t": import_type}).fetchall()
+            ]
+            logs = [l for l in logs if l[2] is not None]
+            if not logs:
+                continue
+
+            matched = 0
+            for row_id, godown_id, created_at in unlinked:
+                created_at = _as_datetime(created_at)
+                if created_at is None:
+                    continue
+                log_id = next(
+                    (lid for lid, lgod, lat in logs
+                     if lat >= created_at and (lgod == godown_id or lgod is None)),
+                    None,
+                )
+                if log_id is None:
+                    continue
+                conn.execute(text(f"UPDATE {table} SET import_log_id = :l WHERE id = :r"),
+                             {"l": log_id, "r": row_id})
+                matched += 1
+            if matched:
+                logger.info("Linked %s of %s unlinked %s rows to their import.",
+                            matched, len(unlinked), table)

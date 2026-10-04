@@ -89,9 +89,16 @@
 
 <div class="card p-3">
   <h5>Recent Imports</h5>
+  <p class="small text-muted">
+    <strong>Still in app</strong> counts the rows an import brought in that are
+    {%- if user.role == "admin" %} still here. Deleting an import removes exactly those rows and nothing else —
+    GRN and Billing can only come from an import, so that is how a bad upload gets corrected: delete it, then
+    upload the fixed file. Stock and dealer Advance/Hold move with it.
+    {%- else %} still here. Only an admin can delete an import.{% endif %}
+  </p>
   <div class="table-responsive">
   <table class="table table-hover">
-    <thead><tr><th>When</th><th>Type</th><th>Godown</th><th>File</th><th class="num">Total Rows</th><th class="num">Imported</th><th class="num">Duplicate</th><th class="num">Unmapped</th><th class="num">Pending/In-Transit</th><th class="num">Other Skipped</th></tr></thead>
+    <thead><tr><th>When</th><th>Type</th><th>Godown</th><th>File</th><th class="num">Total Rows</th><th class="num">Imported</th><th class="num">Duplicate</th><th class="num">Unmapped</th><th class="num">Pending/In-Transit</th><th class="num">Other Skipped</th><th class="num">Still in app</th>{% if user.role == "admin" %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for l in logs %}
       <tr>
@@ -108,9 +115,20 @@
         <td class="num">{{ l.rows_skipped_unmapped }}</td>
         <td class="num">{{ l.rows_skipped_pending }}</td>
         <td class="num">{{ l.rows_skipped_other }}</td>
+        {% set c = log_counts.get(l.id) %}
+        <td class="num {{ 'text-muted' if not c or not c.total }}">{{ c.total if c else 0 }}</td>
+        {% if user.role == "admin" %}
+        <td class="num"><span class="row-actions">
+          <form method="post" action="/import/{{ l.id }}/delete" class="d-inline"
+                onsubmit="return confirm('Delete this import?\n\n{{ l.filename or l.import_type }} — {{ l.godown.name if l.godown else "no godown" }}\n\nThis removes {{ c.total if c else 0 }} row(s) it brought into the app: {{ c.billing if c else 0 }} billing, {{ c.grn if c else 0 }} GRN, {{ c.sap_stock_snapshot if c else 0 }} stock figure(s).\n\nStock and dealer Advance/Hold will change accordingly. Re-uploading the file brings it all back.');">
+            <button class="btn btn-sm btn-outline-danger"
+                    aria-label="Delete import {{ l.filename or l.import_type }}">Delete</button>
+          </form>
+        </span></td>
+        {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="10" class="text-center text-muted">No imports yet.</td></tr>
+      <tr><td colspan="{{ 12 if user.role == 'admin' else 11 }}" class="text-center text-muted">No imports yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

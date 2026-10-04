@@ -101,6 +101,9 @@ class GRN(Base):
     source_plant = Column(String(120), nullable=True)
     remarks = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Which SAP import produced this row. NULL for anything entered by hand,
+    # and for rows that predate the column (those are backfilled on upgrade).
+    import_log_id = Column(Integer, ForeignKey("import_log.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
     product = relationship("Product")
@@ -149,6 +152,9 @@ class Billing(Base):
     amount = Column(Float, nullable=False, default=0)
     remarks = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Which SAP import produced this row. NULL for anything entered by hand,
+    # and for rows that predate the column (those are backfilled on upgrade).
+    import_log_id = Column(Integer, ForeignKey("import_log.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
     dealer = relationship("Dealer")
@@ -261,6 +267,7 @@ class SapStockSnapshot(Base):
     bags = Column(Float, nullable=False, default=0)
     source = Column(String(20), nullable=False, default="pdf")  # "pdf" or "manual"
     filename = Column(String(255), nullable=True)
+    import_log_id = Column(Integer, ForeignKey("import_log.id"), nullable=True, index=True)
     remarks = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow)

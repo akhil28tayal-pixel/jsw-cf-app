@@ -252,8 +252,9 @@ def import_sap_stock_file(db: Session, content, godown_id: int, as_of_date,
         result.rows_imported += 1
 
     for product_id, bags in totals.items():
-        crud.upsert_sap_stock(db, godown_id, product_id, as_of_date, bags,
-                              source="html", filename=filename, user_id=user_id)
+        snapshot = crud.upsert_sap_stock(db, godown_id, product_id, as_of_date, bags,
+                                         source="html", filename=filename, user_id=user_id)
+        result.created_rows.append(("sap_stock_snapshot", snapshot.id))
         codes = contributing[product_id]
         if len(codes) > 1:
             result.messages.append(
